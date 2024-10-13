@@ -92,7 +92,7 @@ jobs:
           if-no-files-found: error
       - name: Create release
         if: |
-          github.repository == 'xenia-canary/xenia-canary' &&
+          github.repository == 'mavethee/xenia-canary-no-avx-check' &&
           github.event.action != 'pull_request' &&
           github.ref == 'refs/heads/canary_experimental' &&
           steps.upload_artifacts.outcome == 'success'
