@@ -9,9 +9,11 @@ on:
       - '.gitignore'
       - '.gdbinit'
       - '.github/*'
+      - '.github/workflows/Linux_build.yml'
       - '.github/*_TEMPLATE/**'
       - '*.md'
       - '*.yml'
+      - '*.txt'
       - 'docs/**'
       - 'src/**/*_posix.*'
       - 'src/**/*_linux.*'
@@ -29,9 +31,11 @@ on:
       - '.gitignore'
       - '.gdbinit'
       - '.github/*'
+      - '.github/workflows/Linux_build.yml'
       - '.github/*_TEMPLATE/**'
       - '*.md'
       - '*.yml'
+      - '*.txt'
       - 'docs/**'
       - 'src/**/*_posix.*'
       - 'src/**/*_linux.*'
@@ -46,9 +50,9 @@ on:
 jobs:
   lint:
     name: Lint
-    runs-on: windows-2022
+    runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@main
       - name: Check Clang-Format Version
         run: clang-format --version
       - name: Lint
@@ -60,40 +64,38 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        vsver: [2022, 2019]
+        vsver: [2022]
     runs-on: windows-${{ matrix.vsver }}
     env:
       POWERSHELL_TELEMETRY_OPTOUT: 1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@main
         with:
           fetch-depth: 0
-      - name: Update Python (VS2019)
-        uses: actions/setup-python@v5
-        if: matrix.vsver == '2019'
-        with:
-          python-version: '3.12'
       - name: Setup
         run: .\xb setup
       - name: Build
         run: .\xb build --config=Release --target=src\xenia-app
       - name: Prepare artifacts
+        id: prepare_artifacts
         run: |
-          robocopy . build\bin\${{ runner.os }}\Release                                                                LICENSE /r:0 /w:0
-          robocopy   build\bin\${{ runner.os }}\Release artifacts\xenia_canary   xenia_canary.exe   xenia_canary.pdb   LICENSE /r:0 /w:0
+          robocopy . build\bin\Windows\Release                                                                LICENSE /r:0 /w:0
+          robocopy   build\bin\Windows\Release artifacts\xenia_canary   xenia_canary.exe   xenia_canary.pdb   LICENSE /r:0 /w:0
           If ($LastExitCode -le 7) { echo "LastExitCode = $LastExitCode";$LastExitCode = 0 }
       - name: Upload xenia canary artifacts
-        uses: actions/upload-artifact@v4
+        if: steps.prepare_artifacts.outcome == 'success'
+        id: upload_artifacts
+        uses: actions/upload-artifact@main
         with:
           name: xenia_canary_vs${{ matrix.vsver }}
           path: artifacts\xenia_canary
           if-no-files-found: error
       - name: Create release
         if: |
-          github.repository == 'xenia-canary/xenia-canary' &&
+          github.repository == 'mavethee/xenia-canary-no-avx-check' &&
           github.event.action != 'pull_request' &&
           github.ref == 'refs/heads/canary_experimental' &&
-          matrix.vsver == '2019'
+          steps.upload_artifacts.outcome == 'success'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
