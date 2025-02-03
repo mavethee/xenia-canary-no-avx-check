@@ -95,14 +95,13 @@ void ImGuiGuestNotification::UpdateNotificationState() {
 
 const ImVec2 ImGuiGuestNotification::CalculateNotificationSize(ImVec2 text_size,
                                                                float scale) {
-  const ImVec2 result =
-      ImVec2(std::floorf((default_notification_icon_size.x +
-                          default_notification_margin_size.x) *
-                         scale) +
-                 text_size.x,
-             std::floorf((default_notification_icon_size.y +
-                          default_notification_margin_size.y) *
-                         scale));
+  const ImVec2 result = ImVec2(floorf((default_notification_icon_size.x +
+                                       default_notification_margin_size.x) *
+                                      scale) +
+                                   text_size.x,
+                               floorf((default_notification_icon_size.y +
+                                       default_notification_margin_size.y) *
+                                      scale));
 
   return result;
 }
@@ -134,13 +133,14 @@ void AchievementNotificationWindow::OnDraw(ImGuiIO& io) {
   const ImVec2 notification_position = CalculateNotificationScreenPosition(
       screen_size, final_notification_size, GetPositionId());
 
-  if (isnan(notification_position.x) || isnan(notification_position.y)) {
+  if (std::isnan(notification_position.x) ||
+      std::isnan(notification_position.y)) {
     return;
   }
 
   ImVec2 current_notification_size = final_notification_size;
   current_notification_size.x *= notification_draw_progress_;
-  current_notification_size.x = std::floorf(current_notification_size.x);
+  current_notification_size.x = floorf(current_notification_size.x);
 
   // Initialize position and window size
   ImGui::SetNextWindowSize(current_notification_size);
@@ -170,7 +170,7 @@ void AchievementNotificationWindow::OnDraw(ImGuiIO& io) {
 
     ImGui::SameLine();
     if (notification_draw_progress_ > 0.5f) {
-      ImGui::TextColored(white_color, GetNotificationText().c_str());
+      ImGui::TextColored(white_color, "%s", GetNotificationText().c_str());
     }
   }
   // Restore previous style
@@ -207,13 +207,14 @@ void XNotifyWindow::OnDraw(ImGuiIO& io) {
   const ImVec2 notification_position = CalculateNotificationScreenPosition(
       screen_size, final_notification_size, GetPositionId());
 
-  if (isnan(notification_position.x) || isnan(notification_position.y)) {
+  if (std::isnan(notification_position.x) ||
+      std::isnan(notification_position.y)) {
     return;
   }
 
   ImVec2 current_notification_size = final_notification_size;
   current_notification_size.x *= notification_draw_progress_;
-  current_notification_size.x = std::floorf(current_notification_size.x);
+  current_notification_size.x = floorf(current_notification_size.x);
 
   // Initialize position and window size
   ImGui::SetNextWindowSize(current_notification_size);
@@ -247,7 +248,7 @@ void XNotifyWindow::OnDraw(ImGuiIO& io) {
 
     ImGui::SameLine();
     if (notification_draw_progress_ > 0.5f) {
-      ImGui::TextColored(white_color, GetDescription().c_str());
+      ImGui::TextColored(white_color, "%s", GetDescription().c_str());
     }
   }
   // Restore previous style

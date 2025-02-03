@@ -37,6 +37,27 @@ DEFINE_int32(user_country, 103,
              " 102=UA 103=US 104=UY 105=UZ 106=VE 107=VN 108=YE 109=ZA\n",
              "XConfig");
 
+DEFINE_uint32(
+    audio_flag, 0x00010001,
+    "Audio Mode Analog.\n"
+    " 0x00000001 = Dolby Pro Logic\n"
+    " 0x00000002 = Analog Mono\n"
+    "Audio Mode Digital.\n"
+    " 0x00000000 = Digital Stereo (choose one of the above by itself)\n"
+    " 0x00010000 = Dolby Digital\n"
+    " 0x00030000 = Dolby Digital with WMA PRO\n"
+    "Special Flags.\n"
+    " 0x00000003 = Stereo Bypass\n"
+    " 0x80000000 = Low Latency\n"
+    " This Config requires you to pair an analog and digitial flag together\n"
+    " while digital stereo only requires an analog flag. Bonus flags are\n"
+    " optional. Ex) 0x00010001\n",
+    "XConfig");
+
+DECLARE_bool(widescreen);
+DECLARE_bool(use_50Hz_mode);
+DECLARE_int32(video_standard);
+
 namespace xe {
 namespace kernel {
 namespace xboxkrnl {
@@ -56,9 +77,26 @@ X_STATUS xeExGetXConfigSetting(uint16_t category, uint16_t setting,
       switch (setting) {
         case 0x0002:  // XCONFIG_SECURED_AV_REGION
           setting_size = 4;
-          xe::store_and_swap<uint32_t>(value, 0x00001000);  // USA/Canada
+          switch (cvars::video_standard) {
+            case 1:  // NTSCM
+              xe::store_and_swap<uint32_t>(value, 0x00400100);
+              break;
+            case 2:  // NTSCJ
+              xe::store_and_swap<uint32_t>(value, 0x00400200);
+              break;
+            case 3:  // PAL
+              xe::store_and_swap<uint32_t>(
+                  value, cvars::use_50Hz_mode ? 0x00800300 : 0x00400400);
+              break;
+            default:
+              xe::store_and_swap<uint32_t>(value, 0);
+              break;
+          }
           break;
         default:
+          XELOGW(
+              "An unimplemented setting 0x{:04X} in XCONFIG SECURED CATEGORY",
+              static_cast<uint16_t>(setting));
           assert_unhandled_case(setting);
           return X_STATUS_INVALID_PARAMETER_2;
       }
@@ -83,7 +121,14 @@ X_STATUS xeExGetXConfigSetting(uint16_t category, uint16_t setting,
           break;
         case 0x000A:  // XCONFIG_USER_VIDEO_FLAGS
           setting_size = 4;
-          xe::store_and_swap<uint32_t>(value, 0x00040000);
+          // 0x00040000 normal
+          // 0x00050000 widescreen
+          xe::store_and_swap<uint32_t>(
+              value, cvars::widescreen ? 0x00050000 : 0x00040000);
+          break;
+        case 0x000B:  // XCONFIG_USER_AUDIO_FLAGS
+          setting_size = 4;
+          xe::store_and_swap<uint32_t>(value, cvars::audio_flag);
           break;
         case 0x000C:  // XCONFIG_USER_RETAIL_FLAGS
           setting_size = 4;
@@ -95,11 +140,15 @@ X_STATUS xeExGetXConfigSetting(uint16_t category, uint16_t setting,
           value[0] = static_cast<uint8_t>(cvars::user_country);
           break;
         default:
+          XELOGW("An unimplemented setting 0x{:04X} in XCONFIG USER CATEGORY",
+                 static_cast<uint16_t>(setting));
           assert_unhandled_case(setting);
           return X_STATUS_INVALID_PARAMETER_2;
       }
       break;
     default:
+      XELOGW("An unimplemented category 0x{:04X}",
+             static_cast<uint16_t>(category));
       assert_unhandled_case(category);
       return X_STATUS_INVALID_PARAMETER_1;
   }
@@ -137,6 +186,36 @@ dword_result_t ExGetXConfigSetting_entry(word_t category, word_t setting,
   return result;
 }
 DECLARE_XBOXKRNL_EXPORT1(ExGetXConfigSetting, kModules, kImplemented);
+
+dword_result_t ExSetXConfigSetting_entry(word_t category, word_t setting,
+                                         lpvoid_t buffer_ptr,
+                                         dword_t buffer_size) {
+  /* Notes:
+      Handles settings the only have a single flag/value like
+     XCONFIG_USER_VIDEO_FLAGS to swap
+  */
+  XELOGI("ExSetXConfigSetting: category: 0X{:04x}, setting: 0X{:04x}",
+         static_cast<uint16_t>(category), static_cast<uint16_t>(setting));
+  return X_STATUS_SUCCESS;
+}
+DECLARE_XBOXKRNL_EXPORT1(ExSetXConfigSetting, kModules, kStub);
+
+dword_result_t ExReadModifyWriteXConfigSettingUlong_entry(word_t category,
+                                                          word_t setting,
+                                                          dword_t bit_affected,
+                                                          dword_t flag) {
+  /* Notes:
+      Handles settings with multiple flags like XCONFIG_USER_RETAIL_FLAGS and
+     XCONFIG_CONSOLE_RETAIL_EX_FLAGS
+  */
+  XELOGI(
+      "ExReadModifyWriteXConfigSettingUlong: category: 0x{:04x}, setting: "
+      "{:04x}, changed bits: 0X{:08x}, setting flag 0X{:08x}",
+      static_cast<uint16_t>(category), static_cast<uint16_t>(setting),
+      static_cast<uint32_t>(bit_affected), static_cast<uint32_t>(flag));
+  return X_STATUS_SUCCESS;
+}
+DECLARE_XBOXKRNL_EXPORT1(ExReadModifyWriteXConfigSettingUlong, kModules, kStub);
 
 }  // namespace xboxkrnl
 }  // namespace kernel

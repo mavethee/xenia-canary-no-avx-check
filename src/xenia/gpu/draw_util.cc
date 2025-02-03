@@ -580,10 +580,17 @@ static inline void GetScissorTmpl(const RegisterFile& XE_RESTRICT regs,
   __m128i pa_sc_scissor = _mm_setr_epi32(
       pa_sc_screen_scissor_tl_tl_x, pa_sc_screen_scissor_tl_tl_y,
       pa_sc_screen_scissor_br_br_x, pa_sc_screen_scissor_br_br_y);
+#if XE_PLATFORM_WIN32
   __m128i xyoffsetadd = _mm_cvtsi64x_si128(
       static_cast<unsigned long long>(pa_sc_window_offset_window_x_offset) |
       (static_cast<unsigned long long>(pa_sc_window_offset_window_y_offset)
        << 32));
+#else
+  __m128i xyoffsetadd = _mm_cvtsi64_si128(
+      static_cast<unsigned long long>(pa_sc_window_offset_window_x_offset) |
+      (static_cast<unsigned long long>(pa_sc_window_offset_window_y_offset)
+       << 32));
+#endif
   xyoffsetadd = _mm_unpacklo_epi64(xyoffsetadd, xyoffsetadd);
   // chrispy: put this here to make it clear that the shift by 31 is extracting
   // this field
@@ -1072,8 +1079,9 @@ bool GetResolveInfo(const RegisterFile& regs, const Memory& memory,
         "Incorrect resolve sample selected for {}-sample {}: {}, treating like "
         "{}",
         1 << uint32_t(rb_surface_info.msaa_samples),
-        is_depth ? "depth" : "color", rb_copy_control.copy_sample_select,
-        sample_select);
+        is_depth ? "depth" : "color",
+        static_cast<uint32_t>(rb_copy_control.copy_sample_select),
+        static_cast<uint32_t>(sample_select));
   }
   info_out.copy_dest_coordinate_info.copy_sample_select = sample_select;
   // Get the format to pass to the shader in a unified way - for depth (for

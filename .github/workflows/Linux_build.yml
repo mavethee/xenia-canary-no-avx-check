@@ -1,0 +1,109 @@
+name: Linux build
+
+on:
+  push:
+    paths-ignore:
+      - '.clang-format'
+      - '.drone.star'
+      - '.gitattributes'
+      - '.gitignore'
+      - '.gdbinit'
+      - '.github/*'
+      - '.github/workflows/Windows_build.yml'
+      - '.github/*_TEMPLATE/**'
+      - '*.md'
+      - '*.yml'
+      - '*.txt'
+      - 'docs/**'
+      - 'src/**/*_windows.*'
+      - 'src/**/*_android.*'
+      - 'src/**/*_mac.*'
+      - 'LICENSE'
+  pull_request:
+    paths-ignore:
+      - '.clang-format'
+      - '.drone.star'
+      - '.gitattributes'
+      - '.gitignore'
+      - '.gdbinit'
+      - '.github/*'
+      - '.github/workflows/Windows_build.yml'
+      - '.github/*_TEMPLATE/**'
+      - '*.md'
+      - '*.yml'
+      - '*.txt'
+      - 'docs/**'
+      - 'src/**/*_windows.*'
+      - 'src/**/*_android.*'
+      - 'src/**/*_mac.*'
+      - 'LICENSE'
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@main
+      - name: Setup
+        run: |
+          LLVM_VERSION=18 # Same as Windows
+          UBUNTU_BASE=jammy
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          sudo apt-add-repository "deb http://apt.llvm.org/${UBUNTU_BASE}/ llvm-toolchain-${UBUNTU_BASE}-$LLVM_VERSION main"
+          sudo apt-get -y update
+          sudo apt-get -y install clang-format-$LLVM_VERSION
+      - name: Lint
+        run: ./xb lint --all
+
+  build:
+    name: Build (LLVM ${{ matrix.LLVM_VERSION }})
+    needs: lint
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        LLVM_VERSION: [19]
+    steps:
+      - uses: actions/checkout@main
+        with:
+          fetch-depth: 0
+      - name: Setup
+        run: |
+          UBUNTU_BASE=jammy
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          sudo apt-add-repository "deb http://apt.llvm.org/${UBUNTU_BASE}/ llvm-toolchain-${UBUNTU_BASE}-${{ matrix.LLVM_VERSION }} main"
+          sudo apt-get -y update
+          sudo apt-get -y install mesa-vulkan-drivers valgrind libc++-dev libc++abi-dev libgtk-3-dev libsdl2-dev libvulkan-dev libx11-xcb-dev clang-${{ matrix.LLVM_VERSION }} llvm-${{ matrix.LLVM_VERSION }} ninja-build
+          ./xb setup
+      - name: Build
+        env:
+          CC: clang-${{ matrix.LLVM_VERSION }}
+          CXX: clang++-${{ matrix.LLVM_VERSION }}
+          AR: llvm-ar-${{ matrix.LLVM_VERSION }}
+        run: ./xb build --config=Release
+      - name: Prepare artifacts
+        id: prepare_artifacts
+        run: |
+          mkdir -p artifacts
+          cp -r build/bin/Linux/Release/xenia_canary LICENSE artifacts
+      - name: Upload xenia canary artifacts
+        if: steps.prepare_artifacts.outcome == 'success'
+        uses: actions/upload-artifact@main
+        with:
+          name: xenia_canary_linux
+          path: artifacts
+          if-no-files-found: error
+
+  create-release:
+    name: Create release
+    needs: [lint, build]
+    if: |
+      github.repository == 'xenia-canary/xenia-canary' &&
+      github.event.action != 'pull_request' &&
+      github.ref == 'refs/heads/canary_experimental'
+    uses: ./.github/workflows/Create_release.yml
+    with:
+      os: linux
+    secrets:
+      RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}

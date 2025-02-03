@@ -25,12 +25,35 @@
 #include "winkey_binding_table.inc"
 #undef XE_HID_WINKEY_BINDING
 
-DEFINE_int32(keyboard_user_index, 0, "Controller port that keyboard emulates",
-             "HID.WinKey");
+DEFINE_int32(keyboard_mode, 0,
+             "Allows user do specify keyboard working mode. Possible values: 0 "
+             "- Disabled, 1 - Enabled, 2 - Passthrough. Passthrough requires "
+             "controller being connected!",
+             "HID");
+
+DEFINE_int32(
+    keyboard_user_index, 0,
+    "Controller port that keyboard emulates. [0, 3] - Keyboard is assigned to "
+    "selected slot. Passthrough does not require assigning slot.",
+    "HID");
 
 namespace xe {
 namespace hid {
 namespace winkey {
+
+bool static IsPassthroughEnabled() {
+  return static_cast<KeyboardMode>(cvars::keyboard_mode) ==
+         KeyboardMode::Passthrough;
+}
+
+bool static IsKeyboardForUserEnabled(uint32_t user_index) {
+  if (static_cast<KeyboardMode>(cvars::keyboard_mode) !=
+      KeyboardMode::Enabled) {
+    return false;
+  }
+
+  return cvars::keyboard_user_index == user_index;
+}
 
 bool __inline IsKeyToggled(uint8_t key) {
   return (GetKeyState(key) & 0x1) == 0x1;
@@ -79,7 +102,8 @@ void WinKeyInputDriver::ParseKeyBinding(ui::VirtualKey output_key,
 
     key_bindings_.push_back(key_binding);
     XELOGI("winkey: \"{}\" binds key 0x{:X} to controller input {}.",
-           source_token, key_binding.input_key, description);
+           source_token, static_cast<uint16_t>(key_binding.input_key),
+           description);
   }
 }
 
@@ -104,13 +128,18 @@ X_STATUS WinKeyInputDriver::Setup() { return X_STATUS_SUCCESS; }
 
 X_RESULT WinKeyInputDriver::GetCapabilities(uint32_t user_index, uint32_t flags,
                                             X_INPUT_CAPABILITIES* out_caps) {
-  if (user_index != cvars::keyboard_user_index) {
+  if (!IsKeyboardForUserEnabled(user_index) && !IsPassthroughEnabled()) {
     return X_ERROR_DEVICE_NOT_CONNECTED;
   }
 
-  // TODO(benvanik): confirm with a real XInput controller.
-  out_caps->type = 0x01;      // XINPUT_DEVTYPE_GAMEPAD
-  out_caps->sub_type = 0x01;  // XINPUT_DEVSUBTYPE_GAMEPAD
+  if (IsPassthroughEnabled()) {
+    out_caps->type = X_INPUT_DEVTYPE::XINPUT_DEVTYPE_KEYBOARD;
+    out_caps->sub_type = X_INPUT_DEVSUBTYPE::XINPUT_DEVSUBTYPE_USB_KEYBOARD;
+    return X_ERROR_SUCCESS;
+  }
+
+  out_caps->type = X_INPUT_DEVTYPE::XINPUT_DEVTYPE_GAMEPAD;
+  out_caps->sub_type = X_INPUT_DEVSUBTYPE::XINPUT_DEVSUBTYPE_GAMEPAD;
   out_caps->flags = 0;
   out_caps->gamepad.buttons = 0xFFFF;
   out_caps->gamepad.left_trigger = 0xFF;
@@ -126,7 +155,7 @@ X_RESULT WinKeyInputDriver::GetCapabilities(uint32_t user_index, uint32_t flags,
 
 X_RESULT WinKeyInputDriver::GetState(uint32_t user_index,
                                      X_INPUT_STATE* out_state) {
-  if (user_index != cvars::keyboard_user_index) {
+  if (!IsKeyboardForUserEnabled(user_index)) {
     return X_ERROR_DEVICE_NOT_CONNECTED;
   }
 
@@ -236,12 +265,16 @@ X_RESULT WinKeyInputDriver::GetState(uint32_t user_index,
   out_state->gamepad.thumb_rx = thumb_rx;
   out_state->gamepad.thumb_ry = thumb_ry;
 
+  if (IsPassthroughEnabled()) {
+    memset(out_state, 0, sizeof(out_state));
+  }
+
   return X_ERROR_SUCCESS;
 }
 
 X_RESULT WinKeyInputDriver::SetState(uint32_t user_index,
                                      X_INPUT_VIBRATION* vibration) {
-  if (user_index != cvars::keyboard_user_index) {
+  if (!IsKeyboardForUserEnabled(user_index) && !IsPassthroughEnabled()) {
     return X_ERROR_DEVICE_NOT_CONNECTED;
   }
 
@@ -250,21 +283,13 @@ X_RESULT WinKeyInputDriver::SetState(uint32_t user_index,
 
 X_RESULT WinKeyInputDriver::GetKeystroke(uint32_t user_index, uint32_t flags,
                                          X_INPUT_KEYSTROKE* out_keystroke) {
-  if (user_index != cvars::keyboard_user_index) {
+  if (!is_active()) {
     return X_ERROR_DEVICE_NOT_CONNECTED;
   }
 
-  if (!is_active()) {
-    return X_ERROR_EMPTY;
+  if (!IsKeyboardForUserEnabled(user_index) && !IsPassthroughEnabled()) {
+    return X_ERROR_DEVICE_NOT_CONNECTED;
   }
-
-  X_RESULT result = X_ERROR_EMPTY;
-
-  ui::VirtualKey xinput_virtual_key = ui::VirtualKey::kNone;
-  uint16_t unicode = 0;
-  uint16_t keystroke_flags = 0;
-  uint8_t hid_code = 0;
-
   // Pop from the queue.
   KeyEvent evt;
   {
@@ -277,24 +302,60 @@ X_RESULT WinKeyInputDriver::GetKeystroke(uint32_t user_index, uint32_t flags,
     key_events_.pop();
   }
 
+  X_RESULT result = X_ERROR_EMPTY;
+
+  ui::VirtualKey xinput_virtual_key = ui::VirtualKey::kNone;
+  uint16_t unicode = 0;
+  uint16_t keystroke_flags = 0;
+  uint8_t hid_code = 0;
+
   bool capital = IsKeyToggled(VK_CAPITAL) || IsKeyDown(VK_SHIFT);
-  for (const KeyBinding& b : key_bindings_) {
-    if (b.input_key == evt.virtual_key &&
-        ((b.lowercase == b.uppercase) || (b.lowercase && !capital) ||
-         (b.uppercase && capital))) {
-      xinput_virtual_key = b.output_key;
+
+  if (!IsPassthroughEnabled()) {
+    if (IsKeyboardForUserEnabled(user_index)) {
+      for (const KeyBinding& b : key_bindings_) {
+        if (b.input_key == evt.virtual_key &&
+            ((b.lowercase == b.uppercase) || (b.lowercase && !capital) ||
+             (b.uppercase && capital))) {
+          xinput_virtual_key = b.output_key;
+        }
+      }
+    }
+  } else {
+    xinput_virtual_key = evt.virtual_key;
+
+    if (capital) {
+      keystroke_flags |= 0x0008;  // XINPUT_KEYSTROKE_SHIFT
+    }
+
+    if (IsKeyToggled(VK_CONTROL)) {
+      keystroke_flags |= 0x0010;  // XINPUT_KEYSTROKE_CTRL
+    }
+
+    if (IsKeyToggled(VK_MENU)) {
+      keystroke_flags |= 0x0020;  // XINPUT_KEYSTROKE_ALT
     }
   }
 
   if (xinput_virtual_key != ui::VirtualKey::kNone) {
     if (evt.transition == true) {
       keystroke_flags |= 0x0001;  // XINPUT_KEYSTROKE_KEYDOWN
+      if (evt.prev_state == evt.transition) {
+        keystroke_flags |= 0x0004;  // XINPUT_KEYSTROKE_REPEAT
+      }
     } else if (evt.transition == false) {
       keystroke_flags |= 0x0002;  // XINPUT_KEYSTROKE_KEYUP
     }
 
-    if (evt.prev_state == evt.transition) {
-      keystroke_flags |= 0x0004;  // XINPUT_KEYSTROKE_REPEAT
+    if (IsPassthroughEnabled()) {
+      if (GetKeyboardState(key_map_)) {
+        WCHAR buf;
+        if (ToUnicode(uint8_t(xinput_virtual_key), 0, key_map_, &buf, 1, 0) ==
+            1) {
+          keystroke_flags |= 0x1000;  // XINPUT_KEYSTROKE_VALIDUNICODE
+          unicode = buf;
+        }
+      }
     }
 
     result = X_ERROR_SUCCESS;
@@ -303,7 +364,7 @@ X_RESULT WinKeyInputDriver::GetKeystroke(uint32_t user_index, uint32_t flags,
   out_keystroke->virtual_key = uint16_t(xinput_virtual_key);
   out_keystroke->unicode = unicode;
   out_keystroke->flags = keystroke_flags;
-  out_keystroke->user_index = 0;
+  out_keystroke->user_index = user_index;
   out_keystroke->hid_code = hid_code;
 
   // X_ERROR_EMPTY if no new keys
@@ -321,7 +382,8 @@ void WinKeyInputDriver::WinKeyWindowInputListener::OnKeyUp(ui::KeyEvent& e) {
 }
 
 void WinKeyInputDriver::OnKey(ui::KeyEvent& e, bool is_down) {
-  if (!is_active()) {
+  if (!is_active() || static_cast<KeyboardMode>(cvars::keyboard_mode) ==
+                          KeyboardMode::Disabled) {
     return;
   }
 
@@ -333,6 +395,20 @@ void WinKeyInputDriver::OnKey(ui::KeyEvent& e, bool is_down) {
 
   auto global_lock = global_critical_region_.Acquire();
   key_events_.push(key);
+}
+
+InputType WinKeyInputDriver::GetInputType() const {
+  switch (static_cast<KeyboardMode>(cvars::keyboard_mode)) {
+    case KeyboardMode::Disabled:
+      return InputType::None;
+    case KeyboardMode::Enabled:
+      return InputType::Controller;
+    case KeyboardMode::Passthrough:
+      return InputType::Keyboard;
+    default:
+      break;
+  }
+  return InputType::Controller;
 }
 
 }  // namespace winkey

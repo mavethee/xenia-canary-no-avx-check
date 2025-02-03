@@ -37,7 +37,7 @@ class XContentContainerDevice : public Device {
 
   ~XContentContainerDevice() override;
 
-  bool Initialize();
+  bool Initialize() override;
 
   const std::string& name() const override { return name_; }
   uint32_t attributes() const override { return 0; }
@@ -65,7 +65,13 @@ class XContentContainerDevice : public Device {
 
   kernel::xam::XCONTENT_AGGREGATE_DATA content_header() const;
   uint32_t license_mask() const {
-    return header_->content_header.licenses[0].license_bits;
+    uint32_t final_license = 0;
+    for (uint8_t i = 0; i < license_count; i++) {
+      if (header_->content_header.licenses[i].license_flags) {
+        final_license |= header_->content_header.licenses[i].license_bits;
+      }
+    }
+    return final_license;
   }
 
  protected:
@@ -87,9 +93,9 @@ class XContentContainerDevice : public Device {
   // Initialize any container specific fields.
   virtual void SetupContainer() {};
 
-  Entry* ResolvePath(const std::string_view path);
+  Entry* ResolvePath(const std::string_view path) override;
   void CloseFiles();
-  void Dump(StringBuffer* string_buffer);
+  void Dump(StringBuffer* string_buffer) override;
   Result ReadHeaderAndVerify(FILE* header_file);
 
   void SetName(std::string name) { name_ = name; }

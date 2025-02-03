@@ -229,7 +229,8 @@ dword_result_t XexGetProcedureAddress_entry(lpvoid_t hmodule, dword_t ordinal,
         XELOGW(
             "ERROR: XexGetProcedureAddress ordinal {} (0x{:X}) in '{}' not "
             "found!",
-            ordinal, ordinal, module->name());
+            static_cast<uint32_t>(ordinal), static_cast<uint32_t>(ordinal),
+            module->name());
       }
       *out_function_ptr = 0;
       result = X_STATUS_DRIVER_ENTRYPOINT_NOT_FOUND;
@@ -262,7 +263,7 @@ dword_result_t XexLoadImageHeaders_entry(pointer_t<X_ANSI_STRING> path,
     return X_STATUS_BUFFER_TOO_SMALL;
   }
   auto current_kernel = ctx->kernel_state;
-  auto target_path = util::TranslateAnsiString(current_kernel->memory(), path);
+  auto target_path = util::TranslateAnsiPath(current_kernel->memory(), path);
 
   vfs::File* vfs_file = nullptr;
   vfs::FileAction file_action;

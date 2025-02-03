@@ -121,6 +121,8 @@ typedef uint32_t X_HRESULT;
 
 #define X_E_FALSE                               static_cast<X_HRESULT>(0x80000000L)
 #define X_E_SUCCESS                             X_HRESULT_FROM_WIN32(X_ERROR_SUCCESS)
+#define X_E_ACCESS_DENIED                       X_HRESULT_FROM_WIN32(X_ERROR_ACCESS_DENIED)
+#define X_E_NOT_IMPLEMENTED                     static_cast<X_HRESULT>(0x80004001L)
 #define X_E_FAIL                                static_cast<X_HRESULT>(0x80004005L)
 #define X_E_NO_MORE_FILES                       X_HRESULT_FROM_WIN32(X_ERROR_NO_MORE_FILES)
 #define X_E_INVALIDARG                          X_HRESULT_FROM_WIN32(X_ERROR_INVALID_PARAMETER)
@@ -275,55 +277,70 @@ enum : XNotificationID {
   kXNotifyLive = 0x00000002,
   kXNotifyFriends = 0x00000004,
   kXNotifyCustom = 0x00000008,
+  kXNotifyDvdDrive = 0x00000010,  // ?
   kXNotifyXmp = 0x00000020,
   kXNotifyMsgr = 0x00000040,
   kXNotifyParty = 0x00000080,
   kXNotifyAll = 0x000000EF,
 
-  // XNotification System
-  kXNotificationIDSystemUI = 0x00000009,
-  kXNotificationIDSystemSignInChanged = 0x0000000A,
-  kXNotificationIDSystemStorageDevicesChanged = 0x0000000B,
-  kXNotificationIDSystemProfileSettingChanged = 0x0000000E,
-  kXNotificationIDSystemMuteListChanged = 0x00000011,
-  kXNotificationIDSystemInputDevicesChanged = 0x00000012,
-  kXNotificationIDSystemInputDeviceConfigChanged = 0x00000013,
-  kXNotificationIDSystemPlayerTimerNotice = 0x00000015,
-  kXNotificationIDSystemAvatarChanged = 0x00000017,
-  kXNotificationIDSystemNUIHardwareStatusChanged = 0x00000019,
-  kXNotificationIDSystemNUIPause = 0x0000001A,
-  kXNotificationIDSystemNUIUIApproach = 0x0000001B,
-  kXNotificationIDSystemDeviceRemap = 0x0000001C,
-  kXNotificationIDSystemNUIBindingChanged = 0x0000001D,
-  kXNotificationIDSystemAudioLatencyChanged = 0x0000001E,
-  kXNotificationIDSystemNUIChatBindingChanged = 0x0000001F,
-  kXNotificationIDSystemInputActivityChanged = 0x00000020,
+  // XNotification System (35 total)
+  kXNotificationSystemUI = 0x00000009,
+  kXNotificationSystemSignInChanged = 0x0000000A,
+  kXNotificationSystemStorageDevicesChanged = 0x0000000B,
+  kXNotificationSystemProfileSettingChanged = 0x0000000E,
+  kXNotificationSystemMuteListChanged = 0x00000011,
+  kXNotificationSystemInputDevicesChanged = 0x00000012,
+  kXNotificationSystemInputDeviceConfigChanged = 0x00000013,
+  kXNotificationSystemPlayerTimerNotice = 0x00000015,
+  kXNotificationSystemPXLiveSystemUpdate = 0x00000016,
+  kXNotificationSystemAvatarChanged = 0x00000017,
+  kXNotificationSystemUnknown = 0x00000018,
+  kXNotificationSystemNUIHardwareStatusChanged = 0x00000019,
+  kXNotificationSystemNUIPause = 0x0000001A,
+  kXNotificationSystemNUIUIApproach = 0x0000001B,
+  kXNotificationSystemDeviceRemap = 0x0000001C,
+  kXNotificationSystemNUIBindingChanged = 0x0000001D,
+  kXNotificationSystemAudioLatencyChanged = 0x0000001E,
+  kXNotificationSystemNUIChatBindingChanged = 0x0000001F,
+  kXNotificationSystemInputActivityChanged = 0x00000020,
 
-  // XNotification Live
-  kXNotificationIDLiveConnectionChanged = 0x02000001,
-  kXNotificationIDLiveInviteAccepted = 0x02000002,
-  kXNotificationIDLiveLinkStateChanged = 0x02000003,
-  kXNotificationIDLiveContentInstalled = 0x02000007,
-  kXNotificationIDLiveMembershipPurchased = 0x02000008,
-  kXNotificationIDLiveVoicechatAway = 0x02000009,
-  kXNotificationIDLivePresenceChanged = 0x0200000A,
+  // XNotification Live (20 total)
+  kXNotificationLiveConnectionChanged = 0x02000001,
+  kXNotificationLiveInviteAccepted = 0x02000002,
+  kXNotificationLiveLinkStateChanged = 0x02000003,
+  kXNotificationLiveContentInstalled = 0x02000007,
+  kXNotificationLiveMembershipPurchased = 0x02000008,
+  kXNotificationLiveVoicechatAway = 0x02000009,
+  kXNotificationLivePresenceChanged = 0x0200000A,
+  kXNotificationLiveUnknown = 0x02000012,
 
-  // XNotification Friends
-  kXNotificationIDFriendsPresenceChanged = 0x04000001,
-  kXNotificationIDFriendsFriendAdded = 0x04000002,
-  kXNotificationIDFriendsFriendRemoved = 0x04000003,
+  // XNotification Friends (9 total)
+  kXNotificationFriendsPresenceChanged = 0x04000001,
+  kXNotificationFriendsFriendAdded = 0x04000002,
+  kXNotificationFriendsFriendRemoved = 0x04000003,
+  kXNotificationFriendsUnknown = 0x04000008,
 
-  // XNotification Custom
-  kXNotificationIDCustomActionPressed = 0x06000003,
-  kXNotificationIDCustomGamercard = 0x06000004,
+  // XNotification Custom (5 total)
+  kXNotificationCustomActionPressed = 0x06000003,
+  kXNotificationCustomGamercard = 0x06000004,
 
-  // XNotification XMP
-  kNotificationXmpStateChanged = 0x0A000001,
-  kNotificationXmpPlaybackBehaviorChanged = 0x0A000002,
-  kNotificationXmpPlaybackControllerChanged = 0x0A000003,
+  // XNotification Dvd ?
+  kXNotificationDvdDriveUnknown = 0x80000003,
+  kXNotificationDvdDriveUnknownDashContext = 0x8000000C,
+  kXNotificationDvdDriveTrayStateChanged = 0x8000000D,
 
-  // XNotification Party
-  kXNotificationIDPartyMembersChanged = 0x0E000002,
+  // XNotification XMP (13 total)
+  kXNotificationXmpStateChanged = 0x0A000001,
+  kXNotificationXmpPlaybackBehaviorChanged = 0x0A000002,
+  kXNotificationXmpPlaybackControllerChanged = 0x0A000003,
+  kXNotificationXmpUnknown = 0x0A00000C,
+
+  // XNotification Party (6 total)
+  kXNotificationPartyMembersChanged = 0x0E000002,
+  kXNotificationFriendUnknown = 0x0E000005,
+
+  // XNotification Msgr
+  kXNotificationMsgrUnknown = 0x0C00000E,
 };
 
 // https://github.com/CodeAsm/ffplay360/blob/master/Common/XTLOnPC.h
@@ -540,12 +557,47 @@ const static std::map<XContentType, std::string> XContentTypeMap = {
     {XContentType::kCommunityGame, "Community Game"},
 };
 
+enum X_MARKETPLACE_ENTRYPOINT : uint32_t {
+  ContentList = 0,
+  ContentItem = 1,
+  MembershipList = 2,
+  MembershipItem = 3,
+  ContentList_Background = 4,
+  ContentItem_Background = 5,
+  ForcedNameChangeV1 = 6,
+  ForcedNameChangeV2 = 8,
+  ProfileNameChange = 9,
+  ActiveDownloads = 12
+};
+
 enum class XDeploymentType : uint32_t {
   kOpticalDisc = 0,
   kHardDrive = 1,  // Like extracted?
   kGoD = 2,
   kUnknown = 0xFF,
 };
+
+inline bool IsOfflineXUID(uint64_t xuid) { return ((xuid >> 60) & 0xF) == 0xE; }
+
+inline bool IsOnlineXUID(uint64_t xuid) {
+  return ((xuid >> 48) & 0xFFFF) == 0x9;
+}
+
+inline bool IsGuestXUID(uint64_t xuid) {
+  const uint32_t HighPart = xuid >> 48;
+  return ((HighPart & 0x000F) == 0x9) && ((HighPart & 0x00C0) > 0);
+}
+
+inline bool IsTeamXUID(uint64_t xuid) {
+  return (xuid & 0xFF00000000000140) == 0xFE00000000000100;
+}
+
+inline bool IsValidXUID(uint64_t xuid) {
+  const bool valid = IsOfflineXUID(xuid) || IsOnlineXUID(xuid) ||
+                     IsTeamXUID(xuid) || IsGuestXUID(xuid);
+
+  return valid;
+}
 
 #pragma pack(push, 4)
 struct X_XAMACCOUNTINFO {
@@ -567,6 +619,7 @@ struct X_XAMACCOUNTINFO {
   };
 
   enum AccountSubscriptionTier {
+    kSubscriptionTierNone = 0,
     kSubscriptionTierSilver = 3,
     kSubscriptionTierGold = 6,
     kSubscriptionTierFamilyGold = 9
@@ -598,12 +651,7 @@ struct X_XAMACCOUNTINFO {
                              AccountReservedFlags::kLiveEnabled);
   }
 
-  bool IsXUIDOffline() { return ((xuid_online >> 60) & 0xF) == 0xE; }
-  bool IsXUIDOnline() { return ((xuid_online >> 48) & 0xFFFF) == 0x9; }
-  bool IsXUIDValid() { return IsXUIDOffline() != IsXUIDOnline(); }
-  bool IsTeamXUID() {
-    return (xuid_online & 0xFF00000000000140) == 0xFE00000000000100;
-  }
+  uint32_t GetCachedFlags() const { return cached_user_flags; };
 
   uint32_t GetCountry() const {
     return (cached_user_flags & kCountryMask) >> 8;
@@ -625,8 +673,50 @@ struct X_XAMACCOUNTINFO {
 static_assert_size(X_XAMACCOUNTINFO, 0x17C);
 #pragma pack(pop)
 
-}  // namespace xe
+struct X_PROFILEENUMRESULT {
+  xe::be<uint64_t> xuid_offline;  // E0.....
+  X_XAMACCOUNTINFO account;
+  xe::be<uint32_t> device_id;
+};
+static_assert_size(X_PROFILEENUMRESULT, 0x188);
+
+struct MESSAGEBOX_RESULT {
+  union {
+    xe::be<uint32_t> ButtonPressed;
+    xe::be<uint16_t> Passcode[4];
+  };
+};
+
+// clang-format off
+
+#define XMBox_NOICON                0x00000000
+#define XMBox_ERRORICON             0x00000001
+#define XMBox_WARNINGICON           0x00000002
+#define XMBox_ALERTICON             0x00000003
+
+#define XMBox_PASSCODEMODE          0x00010000
+#define XMBox_VERIFYPASSCODEMODE    0x00020000
+
+#define XMBox_WAITANIMATION         0x00001000
+#define XMBox_LIVEPASSCODEMODE      0x00030000
+#define XMBox_MODEMASK              0x00030000
+
+#define XMBox_OK                    1
+#define XMBox_CANCEL                2
+
+#define X_BUTTON_PASSCODE           0x00005802
+#define Y_BUTTON_PASSCODE           0x00005803
+#define RIGHT_BUMPER_PASSCODE       0x00005804
+#define LEFT_BUMPER_PASSCODE        0x00005805
+#define LEFT_TRIGGER_PASSCODE       0x00005806
+#define RIGHT_TRIGGER_PASSCODE      0x00005807
+#define DPAD_UP_PASSCODE            0x00005810
+#define DPAD_DOWN_PASSCODE          0x00005811
+#define DPAD_LEFT_PASSCODE          0x00005812
+#define DPAD_RIGHT_PASSCODE         0x00005813
 
 // clang-format on
+
+}  // namespace xe
 
 #endif  // XENIA_XBOX_H_

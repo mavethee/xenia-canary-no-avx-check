@@ -15,7 +15,7 @@
 #include <numeric>
 #include <tuple>
 
-#define UTF_CPP_CPLUSPLUS 201703L
+#define UTF_CPP_CPLUSPLUS 202002L
 #include "third_party/utfcpp/source/utf8.h"
 
 namespace utfcpp = utf8;
@@ -469,7 +469,7 @@ bool ends_with_case(const std::string_view haystack,
 }
 
 std::vector<std::string_view> split_path(const std::string_view path) {
-  return split(path, u8"\\/", true);
+  return split(path, "\\/", true);
 }
 
 std::string join_paths(const std::string_view left_path,

@@ -1136,10 +1136,14 @@ void XexModule::Precompile() {
                                 high_code);
   final_image_sha_.finalize(image_sha_bytes_);
 
-  char fmtbuf[16];
+  char fmtbuf[20];
 
   for (unsigned i = 0; i < 20; ++i) {
+#ifdef XE_PLATFORM_WIN32
     sprintf_s(fmtbuf, "%X", image_sha_bytes_[i]);
+#else
+    snprintf(fmtbuf, sizeof(fmtbuf), "%X", image_sha_bytes_[i]);
+#endif
     image_sha_str_ += &fmtbuf[0];
   }
 
@@ -1397,6 +1401,10 @@ void XexInfoCache::Init(XexModule* xexmod) {
   };
 
   bool did_exist = try_open();
+  if (!GetHeader()) {
+    return;
+  }
+
   if (!did_exist) {
     GetHeader()->version = CURRENT_INFOCACHE_VERSION;
 

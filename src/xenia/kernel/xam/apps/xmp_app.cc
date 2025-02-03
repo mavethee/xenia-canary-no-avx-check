@@ -108,7 +108,7 @@ X_HRESULT XmpApp::XMPPlayTitlePlaylist(uint32_t playlist_handle,
   XELOGD("XMPPlayTitlePlaylist({:08X}, {:08X})", playlist_handle, song_handle);
   kernel_state_->emulator()->audio_media_player()->Play(playlist_handle,
                                                         song_handle, false);
-  kernel_state_->BroadcastNotification(kNotificationXmpPlaybackBehaviorChanged,
+  kernel_state_->BroadcastNotification(kXNotificationXmpPlaybackBehaviorChanged,
                                        1);
   return X_E_SUCCESS;
 }
@@ -214,7 +214,7 @@ X_HRESULT XmpApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
           static_cast<PlaybackFlags>(uint32_t(args->flags)));
 
       kernel_state_->BroadcastNotification(
-          kNotificationXmpPlaybackBehaviorChanged, 0);
+          kXNotificationXmpPlaybackBehaviorChanged, 0);
       return X_E_SUCCESS;
     }
     case 0x00070009: {
@@ -250,7 +250,8 @@ X_HRESULT XmpApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
       static_assert_size(decltype(*args), 8);
 
       assert_true(args->xmp_client == 0x00000002);
-      XELOGD("XMPSetVolume({:d}, {:g})", args->xmp_client, float(args->value));
+      XELOGD("XMPSetVolume({:d}, {:g})", args->xmp_client.get(),
+             float(args->value));
       kernel_state_->emulator()->audio_media_player()->SetVolume(
           float(args->value));
       return X_E_SUCCESS;
@@ -358,7 +359,7 @@ X_HRESULT XmpApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
           PlaybackClient(uint32_t(args->playback_client)));
 
       kernel_state_->BroadcastNotification(
-          kNotificationXmpPlaybackControllerChanged,
+          kXNotificationXmpPlaybackControllerChanged,
           kernel_state_->emulator()
               ->audio_media_player()
               ->IsTitleInPlaybackControl());
@@ -476,8 +477,8 @@ X_HRESULT XmpApp::DispatchMessageSync(uint32_t message, uint32_t buffer_ptr,
       static_assert_size(decltype(*args), 16);
 
       XELOGD("XMPCaptureOutput({:08X}, {:08X}, {:08X}, {:08X})",
-             args->xmp_client, args->callback, args->context,
-             args->title_render);
+             args->xmp_client.get(), args->callback.get(), args->context.get(),
+             args->title_render.get());
       kernel_state_->emulator()->audio_media_player()->SetCaptureCallback(
           args->callback, args->context, static_cast<bool>(args->title_render));
       return X_E_SUCCESS;

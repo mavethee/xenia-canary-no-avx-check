@@ -21,15 +21,10 @@ namespace kernel {
 namespace xam {
 
 using xe::hid::X_INPUT_CAPABILITIES;
+using xe::hid::X_INPUT_FLAG;
 using xe::hid::X_INPUT_KEYSTROKE;
 using xe::hid::X_INPUT_STATE;
 using xe::hid::X_INPUT_VIBRATION;
-
-constexpr uint32_t XINPUT_FLAG_GAMEPAD = 0x01;
-constexpr uint32_t XINPUT_FLAG_KEYBOARD = 0x02;
-constexpr uint32_t XINPUT_FLAG_MIC = 0x20;  // Based on "karaoke" titles
-constexpr uint32_t XINPUT_FLAG_ANYDEVICE = 0xFF;
-constexpr uint32_t XINPUT_FLAG_ANY_USER = 1 << 30;
 
 dword_result_t XAutomationpUnbindController_entry(dword_t user_index) {
   if (user_index >= XUserMaxUserCount) {
@@ -65,7 +60,7 @@ dword_result_t XamInputGetCapabilitiesEx_entry(
 
   caps.Zero();
 
-  if ((flags & XINPUT_FLAG_ANY_USER) != 0) {
+  if ((flags & X_INPUT_FLAG::X_INPUT_FLAG_ANY_USER) != 0) {
     // should trap
   }
 
@@ -73,21 +68,22 @@ dword_result_t XamInputGetCapabilitiesEx_entry(
     // should trap
   }
 
-  if ((flags & XINPUT_FLAG_ANYDEVICE) && (flags & XINPUT_FLAG_GAMEPAD) == 0) {
-    // Ignore any query for other types of devices.
-    return X_ERROR_DEVICE_NOT_CONNECTED;
-  }
-
   uint32_t actual_user_index = user_index;
   if ((actual_user_index & XUserIndexAny) == XUserIndexAny ||
-      (flags & XINPUT_FLAG_ANY_USER)) {
+      (flags & X_INPUT_FLAG::X_INPUT_FLAG_ANY_USER)) {
     // Always pin user to 0.
     actual_user_index = 0;
   }
 
+  uint32_t actual_flags = flags;
+  if (!flags) {
+    actual_flags = X_INPUT_FLAG::X_INPUT_FLAG_GAMEPAD |
+                   X_INPUT_FLAG::X_INPUT_FLAG_KEYBOARD;
+  }
+
   auto input_system = kernel_state()->emulator()->input_system();
   auto lock = input_system->lock();
-  return input_system->GetCapabilities(actual_user_index, flags, caps);
+  return input_system->GetCapabilities(actual_user_index, actual_flags, caps);
 }
 DECLARE_XAM_EXPORT1(XamInputGetCapabilitiesEx, kInput, kSketchy);
 
@@ -112,22 +108,19 @@ dword_result_t XamInputGetState_entry(dword_t user_index, dword_t flags,
 
   // Games call this with a NULL state ptr, probably as a query.
 
-  if ((flags & XINPUT_FLAG_ANYDEVICE) && (flags & XINPUT_FLAG_GAMEPAD) == 0) {
-    // Ignore any query for other types of devices.
-    return X_ERROR_DEVICE_NOT_CONNECTED;
-  }
-
   uint32_t actual_user_index = user_index;
   // chrispy: change this, logic is not right
   if ((actual_user_index & XUserIndexAny) == XUserIndexAny ||
-      (flags & XINPUT_FLAG_ANY_USER)) {
+      (flags & X_INPUT_FLAG::X_INPUT_FLAG_ANY_USER)) {
     // Always pin user to 0.
     actual_user_index = 0;
   }
 
   auto input_system = kernel_state()->emulator()->input_system();
   auto lock = input_system->lock();
-  return input_system->GetState(user_index, input_state);
+  return input_system->GetState(
+      user_index, !flags ? X_INPUT_FLAG::X_INPUT_FLAG_GAMEPAD : flags,
+      input_state);
 }
 DECLARE_XAM_EXPORT2(XamInputGetState, kInput, kImplemented, kHighFrequency);
 
@@ -160,14 +153,9 @@ dword_result_t XamInputGetKeystroke_entry(
     return X_ERROR_BAD_ARGUMENTS;
   }
 
-  if ((flags & XINPUT_FLAG_ANYDEVICE) && (flags & XINPUT_FLAG_GAMEPAD) == 0) {
-    // Ignore any query for other types of devices.
-    return X_ERROR_DEVICE_NOT_CONNECTED;
-  }
-
   uint32_t actual_user_index = user_index;
   if ((actual_user_index & XUserIndexAny) == XUserIndexAny ||
-      (flags & XINPUT_FLAG_ANY_USER)) {
+      (flags & X_INPUT_FLAG::X_INPUT_FLAG_ANY_USER)) {
     // Always pin user to 0.
     actual_user_index = 0;
   }
@@ -186,11 +174,6 @@ dword_result_t XamInputGetKeystrokeEx_entry(
     return X_ERROR_BAD_ARGUMENTS;
   }
 
-  if ((flags & XINPUT_FLAG_ANYDEVICE) && (flags & XINPUT_FLAG_GAMEPAD) == 0) {
-    // Ignore any query for other types of devices.
-    return X_ERROR_DEVICE_NOT_CONNECTED;
-  }
-
   uint32_t user_index = *user_index_ptr;
   auto input_system = kernel_state()->emulator()->input_system();
   auto lock = input_system->lock();
@@ -199,7 +182,7 @@ dword_result_t XamInputGetKeystrokeEx_entry(
     user_index = 0;
   }
 
-  if (flags & XINPUT_FLAG_ANY_USER) {
+  if (flags & X_INPUT_FLAG::X_INPUT_FLAG_ANY_USER) {
     // That flag means we should iterate over every connected controller and
     // check which one have pending request.
     auto result = X_ERROR_DEVICE_NOT_CONNECTED;
@@ -224,9 +207,10 @@ dword_result_t XamInputGetKeystrokeEx_entry(
 }
 DECLARE_XAM_EXPORT1(XamInputGetKeystrokeEx, kInput, kImplemented);
 
-X_HRESULT_result_t XamUserGetDeviceContext_entry(dword_t user_index,
-                                                 dword_t unk,
-                                                 lpdword_t out_ptr) {
+X_HRESULT_result_t XamUserGetDeviceContext_entry(
+    dword_t user_index,
+    dword_t unk,  // It's set to 3 for a big button
+    lpdword_t out_ptr) {
   // Games check the result - usually with some masking.
   // If this function fails they assume zero, so let's fail AND
   // set zero just to be safe.

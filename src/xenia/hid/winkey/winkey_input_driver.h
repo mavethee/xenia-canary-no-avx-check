@@ -20,6 +20,8 @@ namespace xe {
 namespace hid {
 namespace winkey {
 
+enum class KeyboardMode { Disabled, Enabled, Passthrough };
+
 class WinKeyInputDriver final : public InputDriver {
  public:
   explicit WinKeyInputDriver(xe::ui::Window* window, size_t window_z_order);
@@ -33,6 +35,7 @@ class WinKeyInputDriver final : public InputDriver {
   X_RESULT SetState(uint32_t user_index, X_INPUT_VIBRATION* vibration) override;
   X_RESULT GetKeystroke(uint32_t user_index, uint32_t flags,
                         X_INPUT_KEYSTROKE* out_keystroke) override;
+  virtual InputType GetInputType() const override;
 
  protected:
   struct KeyEvent {
@@ -72,7 +75,7 @@ class WinKeyInputDriver final : public InputDriver {
   xe::global_critical_region global_critical_region_;
   std::queue<KeyEvent> key_events_;
   std::vector<KeyBinding> key_bindings_;
-
+  uint8_t key_map_[256];
   uint32_t packet_number_ = 1;
 };
 

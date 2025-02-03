@@ -18,8 +18,7 @@ namespace vfs {
 std::unique_ptr<Device> XContentContainerDevice::CreateContentDevice(
     const std::string_view mount_path, const std::filesystem::path& host_path) {
   if (!std::filesystem::exists(host_path)) {
-    XELOGE("Path to XContent container does not exist: {}",
-           xe::path_to_utf8(host_path));
+    XELOGE("Path to XContent container does not exist: {}", host_path);
     return nullptr;
   }
 
@@ -75,8 +74,7 @@ XContentContainerDevice::~XContentContainerDevice() {}
 
 bool XContentContainerDevice::Initialize() {
   if (!std::filesystem::exists(host_path_)) {
-    XELOGE("Path to XContent container does not exist: {}",
-           xe::path_to_utf8(host_path_));
+    XELOGE("Path to XContent container does not exist: {}", host_path_);
     return false;
   }
 
@@ -84,7 +82,7 @@ bool XContentContainerDevice::Initialize() {
     return false;
   }
 
-  XELOGI("Loading XContent header file: {}", xe::path_to_utf8(host_path_));
+  XELOGI("Loading XContent header file: {}", host_path_);
   auto header_file = xe::filesystem::OpenFile(host_path_, "rb");
   if (!header_file) {
     XELOGE("Error opening XContent header file.");
@@ -93,7 +91,8 @@ bool XContentContainerDevice::Initialize() {
 
   auto header_loading_result = ReadHeaderAndVerify(header_file);
   if (header_loading_result != Result::kSuccess) {
-    XELOGE("Error reading XContent header: {}", header_loading_result);
+    XELOGE("Error reading XContent header: {}",
+           static_cast<int32_t>(header_loading_result));
     fclose(header_file);
     return false;
   }

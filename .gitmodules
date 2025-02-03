@@ -12,7 +12,7 @@
 	url = https://github.com/catchorg/Catch2.git
 [submodule "third_party/premake-core"]
 	path = third_party/premake-core
-	url = https://github.com/xenia-project/premake-core.git
+	url = https://github.com/premake/premake-core.git
 [submodule "third_party/snappy"]
 	path = third_party/snappy
 	url = https://github.com/xenia-project/snappy.git
@@ -42,7 +42,7 @@
 	url = https://github.com/libsdl-org/SDL.git
 [submodule "third_party/utfcpp"]
 	path = third_party/utfcpp
-	url = https://github.com/xenia-project/utfcpp.git
+	url = https://github.com/nemtrif/utfcpp.git
 [submodule "third_party/fmt"]
 	path = third_party/fmt
 	url = https://github.com/fmtlib/fmt.git

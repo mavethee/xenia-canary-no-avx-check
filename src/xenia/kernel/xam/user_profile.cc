@@ -52,9 +52,9 @@ UserProfile::UserProfile(uint64_t xuid, X_XAMACCOUNTINFO* account_info)
   // XPROFILE_GAMER_CONTROL_SENSITIVITY
   AddSetting(std::make_unique<UserSetting>(0x10040018, 0));
   // Preferred color 1
-  AddSetting(std::make_unique<UserSetting>(0x1004001D, 0xFFFF0000u));
+  AddSetting(std::make_unique<UserSetting>(0x1004001D, PREFERRED_COLOR_NONE));
   // Preferred color 2
-  AddSetting(std::make_unique<UserSetting>(0x1004001E, 0xFF00FF00u));
+  AddSetting(std::make_unique<UserSetting>(0x1004001E, PREFERRED_COLOR_NONE));
   // XPROFILE_GAMER_ACTION_AUTO_AIM
   AddSetting(std::make_unique<UserSetting>(0x10040022, 1));
   // XPROFILE_GAMER_ACTION_AUTO_CENTER
@@ -170,7 +170,8 @@ void UserProfile::LoadSetting(UserSetting* setting) {
   } else {
     // Unsupported for now.  Other settings aren't per-game and need to be
     // stored some other way.
-    XELOGW("Attempting to load unsupported profile setting from disk");
+    XELOGW("Attempting to load unsupported profile setting 0x{:08X} from disk",
+           setting->GetSettingId());
   }
 }
 
@@ -204,7 +205,8 @@ void UserProfile::SaveSetting(UserSetting* setting) {
   } else {
     // Unsupported for now.  Other settings aren't per-game and need to be
     // stored some other way.
-    XELOGW("Attempting to save unsupported profile setting to disk");
+    XELOGW("Attempting to save unsupported profile setting 0x{:08X} from disk",
+           setting->GetSettingId());
   }
 }
 
@@ -230,6 +232,31 @@ Property* UserProfile::GetProperty(const AttributeKey id) {
   }
 
   return nullptr;
+}
+
+AchievementGpdStructure* UserProfile::GetAchievement(const uint32_t title_id,
+                                                     const uint32_t id) {
+  auto title_achievements = achievements_.find(title_id);
+  if (title_achievements == achievements_.end()) {
+    return nullptr;
+  }
+
+  for (auto& entry : title_achievements->second) {
+    if (entry.achievement_id == id) {
+      return &entry;
+    }
+  }
+  return nullptr;
+}
+
+std::vector<AchievementGpdStructure>* UserProfile::GetTitleAchievements(
+    const uint32_t title_id) {
+  auto title_achievements = achievements_.find(title_id);
+  if (title_achievements == achievements_.end()) {
+    return nullptr;
+  }
+
+  return &title_achievements->second;
 }
 
 }  // namespace xam

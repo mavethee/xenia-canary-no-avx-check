@@ -61,8 +61,6 @@
 #include "xenia/hid/xinput/xinput_hid.h"
 #endif  // XE_PLATFORM_WIN32
 
-#include "third_party/fmt/include/fmt/format.h"
-
 DEFINE_string(apu, "any", "Audio system. Use: [any, nop, sdl, xaudio2]", "APU");
 DEFINE_string(gpu, "any", "Graphics system. Use: [any, d3d12, vulkan, null]",
               "GPU");
@@ -178,23 +176,49 @@ class EmulatorApp final : public xe::ui::WindowedApp {
     std::vector<std::unique_ptr<T>> CreateAll(const std::string_view name,
                                               Args... args) {
       std::vector<std::unique_ptr<T>> instances;
-      if (!name.empty() && name != "any") {
+
+      // "Any" path
+      if (name.empty() || name == "any") {
+        for (const auto& creator : creators_) {
+          if (!creator.is_available()) {
+            continue;
+          }
+
+          // Skip xinput for "any" and use SDL
+          if (creator.name.compare("xinput") == 0) {
+            continue;
+          }
+
+          auto instance = creator.instantiate(std::forward<Args>(args)...);
+          if (instance) {
+            instances.emplace_back(std::move(instance));
+          }
+        }
+        return instances;
+      }
+
+      // "Specified" path. Winkey is always added on windows.
+      if (name != "winkey") {
         auto it = std::find_if(
             creators_.cbegin(), creators_.cend(),
             [&name](const auto& f) { return name.compare(f.name) == 0; });
+
         if (it != creators_.cend() && (*it).is_available()) {
           auto instance = (*it).instantiate(std::forward<Args>(args)...);
           if (instance) {
             instances.emplace_back(std::move(instance));
           }
         }
-      } else {
-        for (const auto& creator : creators_) {
-          if (!creator.is_available()) continue;
-          auto instance = creator.instantiate(std::forward<Args>(args)...);
-          if (instance) {
-            instances.emplace_back(std::move(instance));
-          }
+      }
+
+      // Always add winkey for passthrough.
+      auto it = std::find_if(
+          creators_.cbegin(), creators_.cend(),
+          [&name](const auto& f) { return f.name.compare("winkey") == 0; });
+      if (it != creators_.cend() && (*it).is_available()) {
+        auto instance = (*it).instantiate(std::forward<Args>(args)...);
+        if (instance) {
+          instances.emplace_back(std::move(instance));
         }
       }
       return instances;
@@ -408,7 +432,7 @@ bool EmulatorApp::OnInitialize() {
     }
   }
   storage_root = std::filesystem::absolute(storage_root);
-  XELOGI("Storage root: {}", xe::path_to_utf8(storage_root));
+  XELOGI("Storage root: {}", storage_root);
 
   config::SetupConfig(storage_root);
 
@@ -423,7 +447,7 @@ bool EmulatorApp::OnInitialize() {
     }
   }
   content_root = std::filesystem::absolute(content_root);
-  XELOGI("Content root: {}", xe::path_to_utf8(content_root));
+  XELOGI("Content root: {}", content_root);
 
   std::filesystem::path cache_root = cvars::cache_root;
   if (cache_root.empty()) {
@@ -438,7 +462,7 @@ bool EmulatorApp::OnInitialize() {
     }
   }
   cache_root = std::filesystem::absolute(cache_root);
-  XELOGI("Host cache root: {}", xe::path_to_utf8(cache_root));
+  XELOGI("Host cache root: {}", cache_root);
 
   if (cvars::discord) {
     discord::DiscordPresence::Initialize();

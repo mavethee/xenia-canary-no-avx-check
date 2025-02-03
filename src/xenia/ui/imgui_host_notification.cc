@@ -68,7 +68,8 @@ void HostNotificationWindow::OnDraw(ImGuiIO& io) {
   const ImVec2 notification_position = CalculateNotificationScreenPosition(
       screen_size, notification_size, GetPositionId());
 
-  if (isnan(notification_position.x) || isnan(notification_position.y)) {
+  if (std::isnan(notification_position.x) ||
+      std::isnan(notification_position.y)) {
     return;
   }
 
@@ -78,9 +79,9 @@ void HostNotificationWindow::OnDraw(ImGuiIO& io) {
   {
     ImGui::SetWindowFontScale(window_scale);
 
-    ImGui::Text(GetTitle().c_str());
+    ImGui::Text("%s", GetTitle().c_str());
     ImGui::Separator();
-    ImGui::Text(GetDescription().c_str());
+    ImGui::Text("%s", GetDescription().c_str());
   }
   ImGui::End();
 }

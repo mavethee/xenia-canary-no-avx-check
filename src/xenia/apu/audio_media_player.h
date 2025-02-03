@@ -10,6 +10,7 @@
 #ifndef XENIA_APU_AUDIO_MEDIA_PLAYER_H_
 #define XENIA_APU_AUDIO_MEDIA_PLAYER_H_
 
+#include "xenia/apu/audio_driver.h"
 #include "xenia/apu/audio_system.h"
 #include "xenia/kernel/xam/apps/xmp_app.h"
 
@@ -130,7 +131,7 @@ class AudioMediaPlayer {
   // really compatible with it.
   std::unique_ptr<AudioDriver> driver_ = nullptr;
   std::unique_ptr<xe::threading::Semaphore> driver_semaphore_ = {};
-  xe::xe_fast_mutex driver_mutex_ = {};
+  xe_mutex driver_mutex_ = {};
 
   bool SetupDriver(uint32_t sample_rate, uint32_t channels);
   void DeleteDriver();

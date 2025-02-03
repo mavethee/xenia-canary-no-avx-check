@@ -100,7 +100,7 @@ constexpr bool IsPrimitivePolygonal(bool vgt_output_path_is_tessellation_enable,
   return (primitive_polygonal_table & (1U << static_cast<uint32_t>(type))) != 0;
 }
 XE_FORCEINLINE
-bool IsPrimitivePolygonal(const RegisterFile& regs) {
+static bool IsPrimitivePolygonal(const RegisterFile& regs) {
   return IsPrimitivePolygonal(
       regs.Get<reg::VGT_OUTPUT_PATH_CNTL>().path_select ==
           xenos::VGTOutputPath::kTessellationEnable,
@@ -383,7 +383,7 @@ struct GetViewportInfoArgs {
     depth_format = regs.Get<reg::RB_DEPTH_INFO>().depth_format;
   }
   XE_FORCEINLINE
-  bool operator==(const GetViewportInfoArgs& prev) {
+  bool operator==(const GetViewportInfoArgs& prev) const {
 #if XE_ARCH_AMD64 == 0
     bool result = true;
 

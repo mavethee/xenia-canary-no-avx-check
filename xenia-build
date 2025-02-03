@@ -17,6 +17,7 @@ import re
 import shutil
 import subprocess
 import sys
+import stat
 
 __author__ = 'ben.vanik@gmail.com (Ben Vanik)'
 
@@ -416,14 +417,26 @@ def git_is_repository():
 def git_submodule_update():
     """Runs a git submodule init and update.
     """
-    shell_call([
+    ret = shell_call([
         'git',
         '-c',
         'fetch.recurseSubmodules=on-demand',
         'submodule',
         'update',
         '--init',
-        ])
+        '--depth=1',
+        '-j', str(os.cpu_count()),
+        ], throw_on_error=False)
+    if ret != 0:
+        print('Shallow submodule update failed, falling back to normal...')
+        shell_call([
+          'git',
+          '-c',
+          'fetch.recurseSubmodules=on-demand',
+          'submodule',
+          'update',
+          '--init',
+          ])
 
 
 def get_clang_format_binary():
@@ -432,21 +445,27 @@ def get_clang_format_binary():
     Returns:
       A path to the clang-format executable.
     """
+    clang_format_minimum_ver='18'
     attempts = [
-        'C:\\Program Files\\LLVM\\bin\\clang-format.exe',
-        'C:\\Program Files (x86)\\LLVM\\bin\\clang-format.exe',
-        'clang-format-14',
-        'clang-format-13',
+        'clang-format-19',
+        'clang-format-' + clang_format_minimum_ver,
         'clang-format',
         ]
-    if 'VCINSTALLDIR' in os.environ:
-        attempts.append(os.path.join(os.environ['VCINSTALLDIR'], 'Tools', 'Llvm', 'bin', 'clang-format.exe'))
+    if sys.platform == 'win32':
+        attempts.append(os.path.join(os.environ['ProgramFiles'], 'LLVM', 'bin', 'clang-format.exe'))
+        attempts.append(os.path.join(os.environ['ProgramFiles(x86)'], 'LLVM', 'bin', 'clang-format.exe'))
+        if 'VCINSTALLDIR' in os.environ:
+            attempts.append(os.path.join(os.environ['VCINSTALLDIR'], 'Tools', 'Llvm', 'bin', 'clang-format.exe'))
     for binary in attempts:
         if has_bin(binary):
+            shell_call([
+                binary,
+                '--version',
+                ])
             return binary
     print('ERROR: clang-format is not on PATH')
     print('LLVM is available from https://llvm.org/releases/download.html')
-    print('At least version 13 is required.')
+    print('At least version ' + clang_format_minimum_ver + ' is required.')
     print('See docs/style_guide.md for instructions on how to get it.')
     sys.exit(1)
 
@@ -524,7 +543,7 @@ def run_platform_premake(target_os_override=None, cc='clang', devenv=None):
         elif target_os == 'android':
             devenv = 'androidndk'
         else:
-            devenv = 'gmake2'
+            devenv = 'cmake'
     if target_os != 'linux':
         cc = None
     return run_premake(target_os=target_os, action=devenv, cc=cc)
@@ -698,7 +717,7 @@ class PullCommand(Command):
             *args, **kwargs)
         self.parser.add_argument(
             '--merge', action='store_true',
-             help='Merges on master instead of rebasing.')
+             help='Merges on canary-experimental instead of rebasing.')
         self.parser.add_argument(
             '--target_os', default=None,
             help='Target OS passed to premake, for cross-compilation')
@@ -707,11 +726,11 @@ class PullCommand(Command):
         print('Pulling...')
         print('')
 
-        print('- switching to master...')
+        print('- switching to canary-experimental...')
         shell_call([
             'git',
             'checkout',
-            'master',
+            'canary-experimental',
             ])
         print('')
 
@@ -791,7 +810,7 @@ class BaseBuildCommand(Command):
             '--no_premake', action='store_true',
             help='Skips running premake before building.')
         self.parser.add_argument(
-            '-j', default=4, type=int, help='Number of parallel threads')
+            '-j', default=os.cpu_count(), type=int, help='Number of parallel threads')
 
     def execute(self, args, pass_args, cwd):
         if not args['no_premake']:
@@ -841,15 +860,26 @@ class BaseBuildCommand(Command):
             ] + scheme_args + pass_args, shell=False, env=dict(os.environ))
         else:
             result = subprocess.call([
-                'make',
-                '-j' if threads == 0 else '-j%d' % threads,
-                '-Cbuild/',
-                'config=%s_linux' % (args['config']),
-            ] + pass_args + args['target'], shell=False, env=dict(os.environ))
-        print('')
-        if result != 0:
-            print('ERROR: build failed with one or more errors.')
-            return result
+                'cmake',
+                '-Sbuild',
+                '-Bbuild/build_%s' % (args['config']),
+                '-DCMAKE_BUILD_TYPE=%s' % (args['config'].title()),
+                '-DCMAKE_C_COMPILER=' + os.environ.get('CC', 'clang'),
+                '-DCMAKE_CXX_COMPILER=' + os.environ.get('CXX', 'clang++'),
+                '-GNinja'
+            ] + pass_args, shell=False, env=dict(os.environ))
+            print('')
+            if result != 0:
+                print('ERROR: cmake failed with one or more errors.')
+                return result
+            result = subprocess.call([
+                    'ninja',
+                    '-C./build/build_%s' % (args['config']),
+                    '-j' if threads == 0 else '-j%d' % threads,
+                ] + pass_args, shell=False, env=dict(os.environ))
+            if result != 0:
+                print('ERROR: ninja failed with one or more errors.')
+                return result
         return 0
 
 
@@ -1271,11 +1301,24 @@ class GenTestsCommand(Command):
         print('Generating test binaries...')
         print('')
 
-        binutils_path = os.path.join('third_party', 'binutils-ppc-cygwin')
+        if sys.platform == 'win32':
+            binutils_path = os.path.join('third_party', 'binutils-ppc-cygwin')
+        else:
+            binutils_path = os.path.join('third_party', 'binutils', 'bin')
+
         ppc_as = os.path.join(binutils_path, 'powerpc-none-elf-as')
         ppc_ld = os.path.join(binutils_path, 'powerpc-none-elf-ld')
         ppc_objdump = os.path.join(binutils_path, 'powerpc-none-elf-objdump')
         ppc_nm = os.path.join(binutils_path, 'powerpc-none-elf-nm')
+
+        if not os.path.exists(ppc_as) and sys.platform == 'linux':
+            print('Binaries are missing, binutils build required')
+            print('')
+            shell_script = os.path.join('third_party', 'binutils', 'build.sh')
+            # Set executable bit for build script before running it
+            os.chmod(shell_script, stat.S_IRUSR | stat.S_IWUSR |
+                     stat.S_IXUSR | stat.S_IRGRP | stat.S_IROTH)
+            shell_call([shell_script])
 
         test_src = os.path.join('src', 'xenia', 'cpu', 'ppc', 'testing')
         test_bin = os.path.join(test_src, 'bin')
@@ -1327,7 +1370,7 @@ class GpuTestCommand(BaseBuildCommand):
             help='Create reference files for new traces.')
 
     def execute(self, args, pass_args, cwd):
-        print('Testinging...')
+        print('Testing...')
         print('')
 
         # The test executables that will be built and run.
@@ -1431,12 +1474,12 @@ class NukeCommand(Command):
             shutil.rmtree('build/')
         print('')
 
-        print('- git reset to master...')
+        print('- git reset to canary-experimental...')
         shell_call([
             'git',
             'reset',
             '--hard',
-            'master',
+            'canary-experimental',
             ])
         print('')
 

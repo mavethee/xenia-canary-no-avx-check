@@ -16,8 +16,6 @@
 #include <string>
 #include <utility>
 
-#include "third_party/fmt/include/fmt/chrono.h"
-#include "third_party/fmt/include/fmt/format.h"
 #include "third_party/imgui/imgui.h"
 #include "third_party/stb/stb_image_write.h"
 #include "third_party/tomlplusplus/toml.hpp"
@@ -33,7 +31,6 @@
 #include "xenia/cpu/processor.h"
 #include "xenia/emulator.h"
 #include "xenia/gpu/command_processor.h"
-#include "xenia/gpu/d3d12/d3d12_command_processor.h"
 #include "xenia/gpu/graphics_system.h"
 #include "xenia/hid/input_system.h"
 #include "xenia/kernel/xam/profile_manager.h"
@@ -60,7 +57,9 @@ DECLARE_bool(guide_button);
 
 DECLARE_bool(clear_memory_page_state);
 
-DECLARE_bool(d3d12_readback_resolve);
+DECLARE_bool(readback_resolve);
+
+DECLARE_bool(readback_memexport);
 
 DEFINE_bool(fullscreen, false, "Whether to launch the emulator in fullscreen.",
             "Display");
@@ -263,7 +262,7 @@ void EmulatorWindow::OnEmulatorInitialized() {
   if (!emulator_->kernel_state()
            ->xam_state()
            ->profile_manager()
-           ->GetProfilesCount()) {
+           ->GetAccountCount()) {
     new NoProfileDialog(imgui_drawer_.get(), this);
     disable_hotkeys_ = true;
   }
@@ -986,7 +985,7 @@ void EmulatorWindow::SaveImage(const std::filesystem::path& filepath,
                                const xe::ui::RawImage& image) {
   auto file = std::ofstream(filepath, std::ios::binary);
   if (!file.is_open()) {
-    XELOGE("Failed to open file for writing: {}", xe::path_to_utf8(filepath));
+    XELOGE("Failed to open file for writing: {}", filepath);
     return;
   }
 
@@ -998,7 +997,7 @@ void EmulatorWindow::SaveImage(const std::filesystem::path& filepath,
       &file, image.width, image.height, 4, image.data.data(),
       (int)image.stride);
   if (result == 0) {
-    XELOGE("Failed to write PNG to file: {}", xe::path_to_utf8(filepath));
+    XELOGE("Failed to write PNG to file: {}", filepath);
     return;
   }
 }
@@ -1212,12 +1211,11 @@ void EmulatorWindow::ExtractZarchive() {
         // delete incomplete output file
         std::filesystem::remove(abs_extract_dir, ec);
 
-        summary +=
-            fmt::format("\nFailed: {}", path_to_utf8(zarchive_file_path));
+        summary += fmt::format("\nFailed: {}", zarchive_file_path);
 
         XELOGE("Failed to extract Zarchive package.", result);
       } else {
-        summary += fmt::format("\nSuccess: {}", path_to_utf8(abs_extract_dir));
+        summary += fmt::format("\nSuccess: {}", abs_extract_dir);
       }
     }
 
@@ -1313,11 +1311,11 @@ void EmulatorWindow::CreateZarchive() {
         // delete incomplete output file
         std::filesystem::remove(zarchive_file, ec);
 
-        summary += fmt::format("\nFailed: {}", path_to_utf8(abs_content_dir));
+        summary += fmt::format("\nFailed: {}", abs_content_dir);
 
         XELOGE("Failed to create Zarchive package.", result);
       } else {
-        summary += fmt::format("\nSuccess: {}", path_to_utf8(zarchive_file));
+        summary += fmt::format("\nSuccess: {}", zarchive_file);
       }
     }
 
@@ -1408,15 +1406,13 @@ void EmulatorWindow::ToggleDisplayConfigDialog() {
 void EmulatorWindow::ToggleProfilesConfigDialog() {
   if (!profile_config_dialog_) {
     disable_hotkeys_ = true;
-    emulator_->kernel_state()->BroadcastNotification(kXNotificationIDSystemUI,
-                                                     1);
+    emulator_->kernel_state()->BroadcastNotification(kXNotificationSystemUI, 1);
     profile_config_dialog_ =
         std::make_unique<ProfileConfigDialog>(imgui_drawer_.get(), this);
     kernel::xam::xam_dialogs_shown_++;
   } else {
     disable_hotkeys_ = false;
-    emulator_->kernel_state()->BroadcastNotification(kXNotificationIDSystemUI,
-                                                     0);
+    emulator_->kernel_state()->BroadcastNotification(kXNotificationSystemUI, 0);
     profile_config_dialog_.reset();
     kernel::xam::xam_dialogs_shown_--;
   }
@@ -1465,17 +1461,17 @@ void EmulatorWindow::UpdateTitle() {
 
   // Title information, if available
   if (emulator()->is_title_open()) {
-    sb.AppendFormat(u8" | [{:08X}", emulator()->title_id());
+    sb.AppendFormat(" | [{:08X}", emulator()->title_id());
     auto title_version = emulator()->title_version();
     if (!title_version.empty()) {
-      sb.Append(u8" v");
+      sb.Append(" v");
       sb.Append(title_version);
     }
-    sb.Append(u8"]");
+    sb.Append("]");
 
     auto title_name = emulator()->title_name();
     if (!title_name.empty()) {
-      sb.Append(u8" ");
+      sb.Append(" ");
       sb.Append(title_name);
     }
   }
@@ -1485,28 +1481,28 @@ void EmulatorWindow::UpdateTitle() {
   if (graphics_system) {
     auto graphics_name = graphics_system->name();
     if (!graphics_name.empty()) {
-      sb.Append(u8" <");
+      sb.Append(" <");
       sb.Append(graphics_name);
-      sb.Append(u8">");
+      sb.Append(">");
     }
   }
 
   if (Clock::guest_time_scalar() != 1.0) {
-    sb.AppendFormat(u8" (@{:.2f}x)", Clock::guest_time_scalar());
+    sb.AppendFormat(" (@{:.2f}x)", Clock::guest_time_scalar());
   }
 
   if (initializing_shader_storage_) {
-    sb.Append(u8" (Preloading shaders\u2026)");
+    sb.Append(" (Preloading shaders\u2026)");
   }
 
   patcher::Patcher* patcher = emulator()->patcher();
   if (patcher && patcher->IsAnyPatchApplied()) {
-    sb.Append(u8" [Patches Applied]");
+    sb.Append(" [Patches Applied]");
   }
 
   patcher::PluginLoader* pluginloader = emulator()->plugin_loader();
   if (pluginloader && pluginloader->IsAnyPluginLoaded()) {
-    sb.Append(u8" [Plugins Loaded]");
+    sb.Append(" [Plugins Loaded]");
   }
 
   window_->SetTitle(sb.to_string_view());
@@ -1667,14 +1663,19 @@ EmulatorWindow::ControllerHotKey EmulatorWindow::ProcessControllerHotkey(
       xe::threading::Sleep(delay);
       break;
     case ButtonFunctions::RunTitle: {
-      if (selected_title_index == -1) selected_title_index++;
+      if (selected_title_index == -1) {
+        selected_title_index++;
+      }
 
-      app_context().CallInUIThread([this]() {
-        RunTitle(recently_launched_titles_[selected_title_index].path_to_file);
-      });
+      if (selected_title_index < recently_launched_titles_.size()) {
+        app_context().CallInUIThread([this]() {
+          RunTitle(
+              recently_launched_titles_[selected_title_index].path_to_file);
+        });
+      }
     } break;
     case ButtonFunctions::ClearMemoryPageState:
-      ToggleGPUSetting(gpu_cvar::ClearMemoryPageState);
+      ToggleGPUSetting(GPUSetting::ClearMemoryPageState);
 
       // Assume the user wants ClearCaches as well
       if (cvars::clear_memory_page_state) {
@@ -1689,10 +1690,10 @@ EmulatorWindow::ControllerHotKey EmulatorWindow::ProcessControllerHotkey(
       xe::threading::Sleep(delay);
       break;
     case ButtonFunctions::ReadbackResolve:
-      ToggleGPUSetting(gpu_cvar::ReadbackResolve);
+      ToggleGPUSetting(GPUSetting::ReadbackResolve);
 
       notificationTitle = "Toggle Readback Resolve";
-      notificationDesc = cvars::d3d12_readback_resolve ? "Enabled" : "Disabled";
+      notificationDesc = cvars::readback_resolve ? "Enabled" : "Disabled";
 
       // Extra Sleep
       xe::threading::Sleep(delay);
@@ -1764,11 +1765,12 @@ EmulatorWindow::ControllerHotKey EmulatorWindow::ProcessControllerHotkey(
   if ((button_combination.function == ButtonFunctions::IncTitleSelect ||
        button_combination.function == ButtonFunctions::DecTitleSelect) &&
       recently_launched_titles_.size() > 0) {
-    selected_title_index = std::clamp(
-        selected_title_index, 0, (int)recently_launched_titles_.size() - 1);
+    selected_title_index =
+        std::clamp(selected_title_index, 0,
+                   static_cast<int32_t>(recently_launched_titles_.size() - 1));
 
     // Must clear dialogs to prevent stacking
-    imgui_drawer_.get()->ClearDialogs();
+    ClearDialogs();
 
     // Titles may contain Unicode characters such as At World’s End
     // Must use ImGUI font that can render these Unicode characters
@@ -1792,7 +1794,7 @@ EmulatorWindow::ControllerHotKey EmulatorWindow::ProcessControllerHotkey(
   }
 
   if (!notificationTitle.empty()) {
-    app_context_.CallInUIThread([&]() {
+    app_context_.CallInUIThread([=]() {
       new xe::ui::HostNotificationWindow(imgui_drawer(), notificationTitle,
                                          notificationDesc, 0);
     });
@@ -1838,7 +1840,8 @@ void EmulatorWindow::GamepadHotKeys() {
 
       for (uint32_t user_index = 0; user_index < XUserMaxUserCount;
            ++user_index) {
-        X_RESULT result = input_sys->GetState(user_index, &state);
+        X_RESULT result = input_sys->GetState(
+            user_index, X_INPUT_FLAG::X_INPUT_FLAG_GAMEPAD, &state);
 
         // Release the lock before processing the hotkey
         input_lock.mutex()->unlock();
@@ -1860,35 +1863,19 @@ void EmulatorWindow::GamepadHotKeys() {
   }
 }
 
-void EmulatorWindow::ToggleGPUSetting(gpu_cvar value) {
-  switch (value) {
-    case gpu_cvar::ClearMemoryPageState:
-      CommonSaveGPUSetting(CommonGPUSetting::ClearMemoryPageState,
-                           !cvars::clear_memory_page_state);
+void EmulatorWindow::ToggleGPUSetting(gpu::GPUSetting setting) {
+  switch (setting) {
+    case GPUSetting::ClearMemoryPageState:
+      SaveGPUSetting(GPUSetting::ClearMemoryPageState,
+                     !cvars::clear_memory_page_state);
       break;
-    case gpu_cvar::ReadbackResolve:
-      D3D12SaveGPUSetting(D3D12GPUSetting::ReadbackResolve,
-                          !cvars::d3d12_readback_resolve);
+    case GPUSetting::ReadbackResolve:
+      SaveGPUSetting(GPUSetting::ReadbackResolve, !cvars::readback_resolve);
+      break;
+    case GPUSetting::ReadbackMemexport:
+      SaveGPUSetting(GPUSetting::ReadbackMemexport, !cvars::readback_memexport);
       break;
   }
-}
-
-// Determine if the Xbox Gamebar is enabled via the Windows registry
-bool EmulatorWindow::IsUseNexusForGameBarEnabled() {
-#ifdef _WIN32
-  const LPWSTR reg_path = L"SOFTWARE\\Microsoft\\GameBar";
-  const LPWSTR key = L"UseNexusForGameBarEnabled";
-
-  DWORD value = 0;
-  DWORD dataSize = sizeof(value);
-
-  RegGetValue(HKEY_CURRENT_USER, reg_path, key, RRF_RT_DWORD, nullptr, &value,
-              &dataSize);
-
-  return (bool)value;
-#else
-  return false;
-#endif
 }
 
 void EmulatorWindow::DisplayHotKeysConfig() {
@@ -1902,8 +1889,7 @@ void EmulatorWindow::DisplayHotKeysConfig() {
 
     if (!guide_enabled) {
       pretty_text = std::regex_replace(
-          pretty_text,
-          std::regex("Guide", std::regex_constants::syntax_option_type::icase),
+          pretty_text, std::regex("Guide", std::regex_constants::icase),
           "Back");
     }
 
@@ -1931,7 +1917,7 @@ void EmulatorWindow::DisplayHotKeysConfig() {
   msg += "\n";
 
   msg += "Readback Resolve: " +
-         xe::string_util::BoolToString(cvars::d3d12_readback_resolve);
+         xe::string_util::BoolToString(cvars::readback_resolve);
   msg += "\n";
 
   msg += "Clear Memory Page State: " +
@@ -1941,7 +1927,7 @@ void EmulatorWindow::DisplayHotKeysConfig() {
   msg += "Controller Hotkeys: " +
          xe::string_util::BoolToString(cvars::controller_hotkeys);
 
-  imgui_drawer_.get()->ClearDialogs();
+  ClearDialogs();
   xe::ui::ImGuiDialog::ShowMessageBox(imgui_drawer_.get(), "Controller Hotkeys",
                                       msg);
 }
@@ -1962,8 +1948,7 @@ xe::X_STATUS EmulatorWindow::RunTitle(
                     path_to_file.empty() ? "empty" : "invalid");
 
     if (!path_to_file.empty() && !titleExists) {
-      log_msg.append(
-          fmt::format("\nProvided Path: {}", xe::path_to_utf8(path_to_file)));
+      log_msg.append(fmt::format("\nProvided Path: {}", path_to_file));
     }
 
     if (ec) {
@@ -1973,7 +1958,7 @@ xe::X_STATUS EmulatorWindow::RunTitle(
 
     XELOGE("{}", log_msg);
 
-    imgui_drawer_.get()->ClearDialogs();
+    ClearDialogs();
 
     xe::ui::ImGuiDialog::ShowMessageBox(imgui_drawer_.get(),
                                         "Title Launch Failed!", log_msg);
@@ -2020,7 +2005,7 @@ xe::X_STATUS EmulatorWindow::RunTitle(
     display_config_dialog_.reset();
   }
 
-  imgui_drawer_.get()->ClearDialogs();
+  ClearDialogs();
 
   if (result) {
     XELOGE("Failed to launch target: {:08X}", result);
@@ -2146,6 +2131,19 @@ void EmulatorWindow::AddRecentlyLaunchedTitle(
                      std::ofstream::trunc);
   file << toml_table;
   file.close();
+}
+
+void EmulatorWindow::ClearDialogs() {
+  if (profile_config_dialog_) {
+    profile_config_dialog_.reset();
+  }
+
+  if (display_config_dialog_) {
+    display_config_dialog_.reset();
+  }
+
+  imgui_drawer_.get()->ClearDialogs();
+  kernel::xam::xam_dialogs_shown_ = 0;
 }
 
 }  // namespace app

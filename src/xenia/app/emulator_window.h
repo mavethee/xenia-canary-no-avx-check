@@ -13,6 +13,7 @@
 #include <memory>
 #include <string>
 
+#include "xenia/app/profile_dialogs.h"
 #include "xenia/emulator.h"
 #include "xenia/gpu/command_processor.h"
 #include "xenia/ui/imgui_dialog.h"
@@ -24,8 +25,6 @@
 #include "xenia/ui/window_listener.h"
 #include "xenia/ui/windowed_app_context.h"
 #include "xenia/xbox.h"
-
-#include "xenia/app/profile_dialogs.h"
 
 namespace xe {
 namespace app {
@@ -111,11 +110,6 @@ class EmulatorWindow {
     IncTitleSelect,
     DecTitleSelect,
     Unknown
-  };
-
-  enum class gpu_cvar {
-    ClearMemoryPageState,
-    ReadbackResolve,
   };
 
   class ControllerHotKey {
@@ -236,8 +230,7 @@ class EmulatorWindow {
   void VibrateController(xe::hid::InputSystem* input_sys, uint32_t user_index,
                          bool vibrate = true);
   void GamepadHotKeys();
-  void ToggleGPUSetting(gpu_cvar index);
-  bool IsUseNexusForGameBarEnabled();
+  void ToggleGPUSetting(gpu::GPUSetting setting);
   void DisplayHotKeysConfig();
 
   static std::string CanonicalizeFileExtension(
@@ -248,6 +241,8 @@ class EmulatorWindow {
   void LoadRecentlyLaunchedTitles();
   void AddRecentlyLaunchedTitle(std::filesystem::path path_to_file,
                                 std::string title_name);
+
+  void ClearDialogs();
 
   Emulator* emulator_;
   ui::WindowedAppContext& app_context_;

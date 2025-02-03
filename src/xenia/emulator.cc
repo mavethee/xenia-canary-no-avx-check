@@ -41,8 +41,8 @@
 #include "xenia/hid/input_system.h"
 #include "xenia/kernel/kernel_state.h"
 #include "xenia/kernel/user_module.h"
-#include "xenia/kernel/util/gameinfo_utils.h"
 #include "xenia/kernel/util/xdbf_utils.h"
+#include "xenia/kernel/xam/achievement_manager.h"
 #include "xenia/kernel/xam/xam_module.h"
 #include "xenia/kernel/xbdm/xbdm_module.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_module.h"
@@ -420,8 +420,7 @@ X_STATUS Emulator::MountPath(const std::filesystem::path& path,
     return X_STATUS_NO_SUCH_FILE;
   }
   if (!file_system_->RegisterDevice(std::move(device))) {
-    XELOGE("Unable to register the input file to {}.",
-           xe::path_to_utf8(mount_path));
+    XELOGE("Unable to register the input file to {}.", mount_path);
     return X_STATUS_NO_SUCH_FILE;
   }
 
@@ -452,7 +451,7 @@ Emulator::FileSignatureType Emulator::GetFileSignature(
   }
 
   char file_magic[header_size];
-  fread_s(file_magic, sizeof(file_magic), 1, header_size, file);
+  fread(file_magic, sizeof(file_magic), 1, file);
 
   fourcc_t magic_value =
       make_fourcc(file_magic[0], file_magic[1], file_magic[2], file_magic[3]);
@@ -486,7 +485,7 @@ Emulator::FileSignatureType Emulator::GetFileSignature(
 
   file = xe::filesystem::OpenFile(path, "rb");
   xe::filesystem::Seek(file, -header_size, SEEK_END);
-  fread_s(file_magic, sizeof(file_magic), 1, header_size, file);
+  fread(file_magic, 1, header_size, file);
   fclose(file);
 
   magic_value =
@@ -506,6 +505,7 @@ Emulator::FileSignatureType Emulator::GetFileSignature(
     return FileSignatureType::XISO;
   }
 
+  XELOGE("{}: {} ({:08X})", __func__, path.extension(), magic_value);
   return FileSignatureType::Unknown;
 }
 
@@ -657,8 +657,7 @@ X_STATUS Emulator::DataMigration(const uint64_t xuid) {
       if (ec) {
         failure_count++;
         XELOGW("{}: Moving from: {} to: {} failed! Error message: {} ({:08X})",
-               __func__, xe::path_to_utf8(previous_path),
-               xe::path_to_utf8(path / content_type.name), ec.message(),
+               __func__, previous_path, path / content_type.name, ec.message(),
                ec.value());
       }
     }
@@ -680,8 +679,8 @@ X_STATUS Emulator::DataMigration(const uint64_t xuid) {
       if (ec) {
         failure_count++;
         XELOGW("{}: Copying from: {} to: {} failed! Error message: {} ({:08X})",
-               __func__, xe::path_to_utf8(title.path / title.name / "Headers"),
-               xe::path_to_utf8(xuid_path), ec.message(), ec.value());
+               __func__, title.path / title.name / "Headers", xuid_path,
+               ec.message(), ec.value());
       }
 
       const auto header_types =
@@ -703,8 +702,8 @@ X_STATUS Emulator::DataMigration(const uint64_t xuid) {
           failure_count++;
           XELOGW(
               "{}: Copying from: {} to: {} failed! Error message: {} ({:08X})",
-              __func__, xe::path_to_utf8(title.path / title.name / "Headers"),
-              xe::path_to_utf8(common_path), ec.message(), ec.value());
+              __func__, title.path / title.name / "Headers", common_path,
+              ec.message(), ec.value());
         }
       }
 
@@ -720,7 +719,7 @@ X_STATUS Emulator::DataMigration(const uint64_t xuid) {
       const auto old_profile_data =
           xe::filesystem::ListDirectories(title.path / title.name / "profile");
 
-      xe::filesystem::FileInfo& entry_to_copy = xe::filesystem::FileInfo();
+      xe::filesystem::FileInfo entry_to_copy = xe::filesystem::FileInfo();
       if (old_profile_data.size() != 1) {
         for (const auto& entry : old_profile_data) {
           if (entry.name == "User") {
@@ -739,8 +738,7 @@ X_STATUS Emulator::DataMigration(const uint64_t xuid) {
       if (ec) {
         failure_count++;
         XELOGW("{}: Moving from: {} to: {} failed! Error message: {} ({:08X})",
-               __func__, xe::path_to_utf8(path_from),
-               xe::path_to_utf8(path_to_profile_data / title.name),
+               __func__, path_from, path_to_profile_data / title.name,
                ec.message(), ec.value());
       } else {
         std::error_code ec;
@@ -788,19 +786,30 @@ X_STATUS Emulator::InstallContentPackage(
   const vfs::XContentContainerDevice* dev =
       (vfs::XContentContainerDevice*)device.get();
 
+  // Always install savefiles to user signed to slot 0.
+  const auto profile =
+      kernel_state_->xam_state()->profile_manager()->GetProfile(
+          static_cast<uint8_t>(0));
+
+  uint64_t xuid = dev->xuid();
+  if (dev->content_type() == static_cast<uint32_t>(XContentType::kSavedGame) &&
+      profile) {
+    xuid = profile->xuid();
+  }
+
   std::filesystem::path installation_path =
-      content_root() / fmt::format("{:016X}", dev->xuid()) /
+      content_root() / fmt::format("{:016X}", xuid) /
       fmt::format("{:08X}", dev->title_id()) /
       fmt::format("{:08X}", dev->content_type()) / path.filename();
 
   std::filesystem::path header_path =
-      content_root() / fmt::format("{:016X}", dev->xuid()) /
+      content_root() / fmt::format("{:016X}", xuid) /
       fmt::format("{:08X}", dev->title_id()) / "Headers" /
       fmt::format("{:08X}", dev->content_type()) / path.filename();
 
   installation_info.installation_path =
-      fmt::format("{:016X}/{:08X}/{:08X}/{}", dev->xuid(), dev->title_id(),
-                  dev->content_type(), xe::path_to_utf8(path.filename()));
+      fmt::format("{:016X}/{:08X}/{:08X}/{}", xuid, dev->title_id(),
+                  dev->content_type(), path.filename());
 
   installation_info.content_name =
       xe::to_utf8(dev->content_header().display_name());
@@ -827,8 +836,7 @@ X_STATUS Emulator::InstallContentPackage(
     return error_code;
   }
 
-  kernel_state()->BroadcastNotification(kXNotificationIDLiveContentInstalled,
-                                        0);
+  kernel_state()->BroadcastNotification(kXNotificationLiveContentInstalled, 0);
 
   return error_code;
 }
@@ -930,8 +938,7 @@ X_STATUS Emulator::CreateZarchivePackage(
       uint64_t total_bytes_read = 0;
 
       while (total_bytes_read < file_size) {
-        uint64_t bytes_read =
-            fread_s(buffer.data(), buffer.size(), 1, buffer.size(), file);
+        uint64_t bytes_read = fread(buffer.data(), 1, buffer.size(), file);
 
         total_bytes_read += bytes_read;
 
@@ -1305,35 +1312,7 @@ std::string Emulator::FindLaunchModule() {
     return path + cvars::launch_module;
   }
 
-  std::string default_module("default.xex");
-
-  auto gameinfo_entry(file_system_->ResolvePath(path + "GameInfo.bin"));
-  if (gameinfo_entry) {
-    vfs::File* file = nullptr;
-    X_STATUS result =
-        gameinfo_entry->Open(vfs::FileAccess::kGenericRead, &file);
-    if (XSUCCEEDED(result)) {
-      std::vector<uint8_t> buffer(gameinfo_entry->size());
-      size_t bytes_read = 0;
-      result = file->ReadSync(buffer.data(), buffer.size(), 0, &bytes_read);
-      if (XSUCCEEDED(result)) {
-        kernel::util::GameInfo info(buffer);
-        if (info.is_valid()) {
-          XELOGI("Found virtual title {}", info.virtual_title_id());
-
-          const std::string xna_id("584E07D1");
-          auto xna_id_entry(file_system_->ResolvePath(path + xna_id));
-          if (xna_id_entry) {
-            default_module = xna_id + "\\" + info.module_name();
-          } else {
-            XELOGE("Could not find fixed XNA path {}", xna_id);
-          }
-        }
-      }
-    }
-  }
-
-  return path + default_module;
+  return path + "default.xex";
 }
 
 static std::string format_version(xex2_version version) {
@@ -1389,20 +1368,25 @@ X_STATUS Emulator::CompleteLaunch(const std::filesystem::path& path,
   XELOGI("Loading module {}", module_path);
   auto module = kernel_state_->LoadUserModule(module_path);
   if (!module) {
-    XELOGE("Failed to load user module {}", xe::path_to_utf8(path));
+    XELOGE("Failed to load user module {}", path);
     return X_STATUS_NOT_FOUND;
+  }
+
+  if (!module->is_executable()) {
+    kernel_state_->UnloadUserModule(module, false);
+    XELOGE("Failed to load user module {}", path);
+    return X_STATUS_NOT_SUPPORTED;
   }
 
   X_RESULT result = kernel_state_->ApplyTitleUpdate(module);
   if (XFAILED(result)) {
-    XELOGE("Failed to apply title update! Cannot run module {}",
-           xe::path_to_utf8(path));
+    XELOGE("Failed to apply title update! Cannot run module {}", path);
     return result;
   }
 
   result = kernel_state_->FinishLoadingUserModule(module);
   if (XFAILED(result)) {
-    XELOGE("Failed to initialize user module {}", xe::path_to_utf8(path));
+    XELOGE("Failed to initialize user module {}", path);
     return result;
   }
   // Grab the current title ID.
@@ -1505,6 +1489,17 @@ X_STATUS Emulator::CompleteLaunch(const std::filesystem::path& path,
       auto icon_block = game_info_database_->GetIcon();
       if (!icon_block.empty()) {
         display_window_->SetIcon(icon_block.data(), icon_block.size());
+      }
+
+      for (uint8_t slot = 0; slot < XUserMaxUserCount; slot++) {
+        auto user =
+            kernel_state_->xam_state()->profile_manager()->GetProfile(slot);
+
+        if (user) {
+          kernel_state_->xam_state()
+              ->achievement_manager()
+              ->LoadTitleAchievements(user->xuid(), db);
+        }
       }
     }
   }

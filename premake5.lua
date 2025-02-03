@@ -26,7 +26,7 @@ defines({
   "UNICODE",
 })
 
-cppdialect("C++17")
+cppdialect("C++20")
 exceptionhandling("On")
 rtti("On")
 symbols("On")
@@ -63,11 +63,10 @@ filter({"configurations:Checked", "platforms:Linux"})
     "_GLIBCXX_DEBUG",   -- libstdc++ debug mode
   })
 filter({"configurations:Release", "platforms:Windows"})
-	buildoptions({
-		"/Gw", 
-		"/GS-", 
-		"/Oy"
-	})
+  buildoptions({
+    "/Gw",
+    "/Ob3",
+  })
 
 filter("configurations:Debug")
   runtime("Release")
@@ -91,6 +90,7 @@ filter("configurations:Release")
   inlining("Auto")
   flags({
     "LinkTimeOptimization",
+    "NoBufferSecurityCheck",
   })
   -- Not using floatingpoint("Fast") - NaN checks are used in some places
   -- (though rarely), overall preferable to avoid any functional differences
@@ -113,12 +113,18 @@ filter("platforms:Linux")
     "rt",
   })
 
+filter({"platforms:Linux"})
+  vectorextensions("AVX2")
+
 filter({"platforms:Linux", "kind:*App"})
   linkgroups("On")
 
 filter({"platforms:Linux", "language:C++", "toolset:gcc"})
   disablewarnings({
-    "unused-result"
+    "unused-result",
+    "deprecated-volatile",
+    "switch",
+    "deprecated-enum-enum-conversion",
   })
 
 filter({"platforms:Linux", "toolset:gcc"})
@@ -135,11 +141,19 @@ filter({"platforms:Linux", "toolset:gcc"})
 
 filter({"platforms:Linux", "language:C++", "toolset:clang"})
   disablewarnings({
-    "deprecated-register"
+    "deprecated-register",
+    "deprecated-volatile",
+    "switch",
+    "deprecated-enum-enum-conversion",
+    "attributes",
+  })
+  removeflags({
+    "FatalWarnings"
   })
 filter({"platforms:Linux", "language:C++", "toolset:clang", "files:*.cc or *.cpp"})
   buildoptions({
     "-stdlib=libstdc++",
+    "-std=c++20", -- clang doesn't respect cppdialect(?)
   })
 
 filter("platforms:Android-*")
@@ -230,7 +244,7 @@ workspace("xenia")
       platforms({"Linux"})
     elseif os.istarget("macosx") then
       platforms({"Mac"})
-      xcodebuildsettings({           
+      xcodebuildsettings({
         ["ARCHS"] = "x86_64"
       })
     elseif os.istarget("windows") then

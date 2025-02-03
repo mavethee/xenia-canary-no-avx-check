@@ -85,7 +85,7 @@ project("xenia-app")
     })
 
   filter({"architecture:x86_64", "files:../base/main_init_"..platform_suffix..".cc"})
-    vectorextensions("IA32")  -- Disable AVX for main_init_win.cc so our AVX check doesn't use AVX instructions.
+    vectorextensions("SSE2")  -- Disable AVX for main_init_win.cc so our AVX check doesn't use AVX instructions.
 
   filter("platforms:not Android-*")
     links({
@@ -119,11 +119,10 @@ project("xenia-app")
       "xenia-gpu-d3d12-trace-viewer",
       "xenia-ui-window-d3d12-demo",
     })
-  filter({"configurations:Release", "platforms:Windows"})
-    buildoptions({
-      "/Os",
-      "/O1"
-    })
+--  filter({"configurations:Release", "platforms:Windows"})
+--    buildoptions({
+--      "/O1",
+--    })
 
   filter("platforms:Windows")
     -- Only create the .user file if it doesn't already exist.

@@ -27,11 +27,8 @@
 #include "xenia/ui/windowed_app_context.h"
 #include "xenia/xbox.h"
 
-#if XE_PLATFORM_WIN32
-#include "xenia/base/platform_win.h"
-#endif
-
 #include "third_party/fmt/include/fmt/format.h"
+#include "third_party/fmt/include/fmt/xchar.h"
 
 DEFINE_int32(avpack, 8,
              "Video modes\n"
@@ -47,6 +44,11 @@ DEFINE_int32(avpack, 8,
              "Video");
 DECLARE_int32(user_country);
 DECLARE_int32(user_language);
+DECLARE_uint32(audio_flag);
+
+DEFINE_bool(staging_mode, 0,
+            "Enables preview mode in dashboards to render debug information.",
+            "Kernel");
 
 namespace xe {
 namespace kernel {
@@ -57,6 +59,9 @@ typedef enum _MODE { KernelMode, UserMode, MaximumMode } MODE;
 
 dword_result_t XamFeatureEnabled_entry(dword_t unk) { return 0; }
 DECLARE_XAM_EXPORT1(XamFeatureEnabled, kNone, kStub);
+
+dword_result_t XamGetStagingMode_entry() { return cvars::staging_mode; }
+DECLARE_XAM_EXPORT1(XamGetStagingMode, kNone, kStub);
 
 // Empty stub schema binary.
 uint8_t schema_bin[] = {
@@ -83,51 +88,37 @@ dword_result_t XamGetOnlineSchema_entry() {
 }
 DECLARE_XAM_EXPORT1(XamGetOnlineSchema, kNone, kImplemented);
 
-#if XE_PLATFORM_WIN32
-static SYSTEMTIME xeGetLocalSystemTime(uint64_t filetime) {
-  FILETIME t;
-  t.dwHighDateTime = filetime >> 32;
-  t.dwLowDateTime = (uint32_t)filetime;
-
-  SYSTEMTIME st;
-  SYSTEMTIME local_st;
-  FileTimeToSystemTime(&t, &st);
-  SystemTimeToTzSpecificLocalTime(NULL, &st, &local_st);
-  return local_st;
-}
-#endif
-
-void XamFormatDateString_entry(dword_t unk, qword_t filetime,
+void XamFormatDateString_entry(dword_t locale_format, qword_t filetime,
                                lpvoid_t output_buffer, dword_t output_count) {
-  std::memset(output_buffer, 0, output_count * sizeof(char16_t));
+  output_buffer.Zero(output_count * sizeof(char16_t));
 
-// TODO: implement this for other platforms
-#if XE_PLATFORM_WIN32
-  auto st = xeGetLocalSystemTime(filetime);
-  // TODO: format this depending on users locale?
-  auto str = fmt::format(u"{:02d}/{:02d}/{}", st.wMonth, st.wDay, st.wYear);
+  auto tp = xe::chrono::WinSystemClock::to_sys(
+      xe::chrono::WinSystemClock::from_file_time(filetime));
+  auto dp = date::floor<date::days>(tp);
+  auto year_month_day = date::year_month_day{dp};
+
+  auto str = fmt::format(u"{:02d}/{:02d}/{}",
+                         static_cast<unsigned>(year_month_day.month()),
+                         static_cast<unsigned>(year_month_day.day()),
+                         static_cast<int>(year_month_day.year()));
   xe::string_util::copy_and_swap_truncating(output_buffer.as<char16_t*>(), str,
                                             output_count);
-#else
-  assert_always();
-#endif
 }
 DECLARE_XAM_EXPORT1(XamFormatDateString, kNone, kImplemented);
 
 void XamFormatTimeString_entry(dword_t unk, qword_t filetime,
                                lpvoid_t output_buffer, dword_t output_count) {
-  std::memset(output_buffer, 0, output_count * sizeof(char16_t));
+  output_buffer.Zero(output_count * sizeof(char16_t));
 
-// TODO: implement this for other platforms
-#if XE_PLATFORM_WIN32
-  auto st = xeGetLocalSystemTime(filetime);
-  // TODO: format this depending on users locale?
-  auto str = fmt::format(u"{:02d}:{:02d}", st.wHour, st.wMinute);
+  auto tp = xe::chrono::WinSystemClock::to_sys(
+      xe::chrono::WinSystemClock::from_file_time(filetime));
+  auto dp = date::floor<date::days>(tp);
+  auto time = date::hh_mm_ss{date::floor<std::chrono::milliseconds>(tp - dp)};
+
+  auto str = fmt::format(u"{:02d}:{:02d}", time.hours().count(),
+                         time.minutes().count());
   xe::string_util::copy_and_swap_truncating(output_buffer.as<char16_t*>(), str,
                                             output_count);
-#else
-  assert_always();
-#endif
 }
 DECLARE_XAM_EXPORT1(XamFormatTimeString, kNone, kImplemented);
 
@@ -252,22 +243,37 @@ uint32_t xeXGetGameRegion() {
 dword_result_t XGetGameRegion_entry() { return xeXGetGameRegion(); }
 DECLARE_XAM_EXPORT1(XGetGameRegion, kNone, kStub);
 
-dword_result_t XGetLanguage_entry() {
+XLanguage xeGetLanguage(bool extended_languages_support) {
   auto desired_language = static_cast<XLanguage>(cvars::user_language);
+  uint32_t region = xeXGetGameRegion();
+  auto max_languages = extended_languages_support ? XLanguage::kMaxLanguages
+                                                  : XLanguage::kSChinese;
+  if (desired_language < max_languages) {
+    return desired_language;
+  }
+  if ((region & 0xff00) != 0x100) {
+    return XLanguage::kEnglish;
+  }
+  switch (region) {
+    case 0x101:  // NTSC-J (Japan)
+      return XLanguage::kJapanese;
+    case 0x102:  // NTSC-J (China)
+      return extended_languages_support ? XLanguage::kSChinese
+                                        : XLanguage::kEnglish;
+    default:
+      return XLanguage::kKorean;
+  }
+}
 
-  // Switch the language based on game region.
-  // TODO(benvanik): pull from xex header.
-  /* uint32_t game_region = XEX_REGION_NTSCU;
-  if (game_region & XEX_REGION_NTSCU) {
-    desired_language = XLanguage::kEnglish;
-  } else if (game_region & XEX_REGION_NTSCJ) {
-    desired_language = XLanguage::kJapanese;
-  }*/
-  // Add more overrides?
-
-  return uint32_t(desired_language);
+dword_result_t XGetLanguage_entry() {
+  return static_cast<uint32_t>(xeGetLanguage(false));
 }
 DECLARE_XAM_EXPORT1(XGetLanguage, kNone, kImplemented);
+
+dword_result_t XamGetLanguage_entry() {
+  return static_cast<uint32_t>(xeGetLanguage(true));
+}
+DECLARE_XAM_EXPORT1(XamGetLanguage, kNone, kImplemented);
 
 dword_result_t XamGetCurrentTitleId_entry() {
   return kernel_state()->emulator()->title_id();
@@ -454,20 +460,19 @@ DECLARE_XAM_EXPORT1(XamQueryLiveHiveW, kNone, kStub);
 // http://www.noxa.org/blog/2011/02/28/building-an-xbox-360-emulator-part-3-feasibilityos/
 // http://www.noxa.org/blog/2011/08/13/building-an-xbox-360-emulator-part-5-xex-files/
 dword_result_t RtlSleep_entry(dword_t dwMilliseconds, dword_t bAlertable) {
-  LARGE_INTEGER delay{};
+  uint64_t delay{};
 
   // Convert the delay time to 100-nanosecond intervals
-  delay.QuadPart = dwMilliseconds == -1
-                       ? LLONG_MAX
-                       : static_cast<LONGLONG>(-10000) * dwMilliseconds;
+  delay = dwMilliseconds == -1 ? LLONG_MAX
+                               : static_cast<int64_t>(-10000) * dwMilliseconds;
 
-  X_STATUS result = xboxkrnl::KeDelayExecutionThread(
-      MODE::UserMode, bAlertable, (uint64_t*)&delay, nullptr);
+  X_STATUS result = xboxkrnl::KeDelayExecutionThread(MODE::UserMode, bAlertable,
+                                                     &delay, nullptr);
 
   // If the delay was interrupted by an APC, keep delaying the thread
   while (bAlertable && result == X_STATUS_ALERTED) {
     result = xboxkrnl::KeDelayExecutionThread(MODE::UserMode, bAlertable,
-                                              (uint64_t*)&delay, nullptr);
+                                              &delay, nullptr);
   }
 
   return result == X_STATUS_SUCCESS ? X_STATUS_SUCCESS : X_STATUS_USER_APC;
@@ -481,7 +486,7 @@ DECLARE_XAM_EXPORT1(SleepEx, kNone, kImplemented);
 
 // https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-sleep
 void Sleep_entry(dword_t dwMilliseconds) {
-  RtlSleep_entry(dwMilliseconds, FALSE);
+  RtlSleep_entry(dwMilliseconds, false);
 }
 DECLARE_XAM_EXPORT1(Sleep, kNone, kImplemented);
 
@@ -596,28 +601,29 @@ DECLARE_XAM_EXPORT1(GetCurrentThreadId, kNone, kImplemented);
 
 qword_result_t XapiFormatTimeOut_entry(lpqword_t result,
                                        dword_t dwMilliseconds) {
-  LARGE_INTEGER delay{};
+  if (dwMilliseconds == -1) {
+    return 0;
+  }
 
-  // Convert the delay time to 100-nanosecond intervals
-  delay.QuadPart =
-      dwMilliseconds == -1 ? 0 : static_cast<LONGLONG>(-10000) * dwMilliseconds;
-
-  return (uint64_t)&delay;
+  *result = static_cast<int64_t>(-10000) * dwMilliseconds;
+  return result.host_address();
 }
 DECLARE_XAM_EXPORT1(XapiFormatTimeOut, kNone, kImplemented);
 
 dword_result_t WaitForSingleObjectEx_entry(dword_t hHandle,
                                            dword_t dwMilliseconds,
                                            dword_t bAlertable) {
-  uint64_t* timeout = nullptr;
-  uint64_t timeout_ptr = XapiFormatTimeOut_entry(timeout, dwMilliseconds);
+  // TODO(Gliniak): Figure it out to be less janky.
+  uint64_t timeout;
+  uint64_t* timeout_ptr = reinterpret_cast<uint64_t*>(
+      static_cast<uint64_t>(XapiFormatTimeOut_entry(&timeout, dwMilliseconds)));
 
-  X_STATUS result = xe::kernel::xboxkrnl::NtWaitForSingleObjectEx(
-      hHandle, 1, bAlertable, &timeout_ptr);
+  X_STATUS result =
+      xboxkrnl::NtWaitForSingleObjectEx(hHandle, 1, bAlertable, timeout_ptr);
 
   while (bAlertable && result == X_STATUS_ALERTED) {
-    result = xe::kernel::xboxkrnl::NtWaitForSingleObjectEx(
-        hHandle, 1, bAlertable, &timeout_ptr);
+    result =
+        xboxkrnl::NtWaitForSingleObjectEx(hHandle, 1, bAlertable, timeout_ptr);
   }
 
   RtlSetLastNTError_entry(result);
@@ -643,7 +649,7 @@ dword_result_t lstrlenW_entry(lpu16string_t string) {
 }
 DECLARE_XAM_EXPORT1(lstrlenW, kNone, kImplemented);
 
-dword_result_t XGetAudioFlags_entry() { return 65537; }
+dword_result_t XGetAudioFlags_entry() { return cvars::audio_flag; }
 DECLARE_XAM_EXPORT1(XGetAudioFlags, kNone, kStub);
 
 /*
@@ -692,6 +698,9 @@ dword_result_t RtlRandom_entry(lpdword_t seed_out) {
 }
 
 DECLARE_XAM_EXPORT1(RtlRandom, kNone, kImplemented);
+
+dword_result_t Refresh_entry() { return X_ERROR_SUCCESS; }
+DECLARE_XAM_EXPORT1(Refresh, kNone, kStub);
 
 }  // namespace xam
 }  // namespace kernel

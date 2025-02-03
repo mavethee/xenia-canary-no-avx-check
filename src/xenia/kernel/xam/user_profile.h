@@ -19,6 +19,7 @@
 #include "xenia/base/byte_stream.h"
 #include "xenia/kernel/util/property.h"
 #include "xenia/kernel/util/xuserdata.h"
+#include "xenia/kernel/xam/achievement_manager.h"
 #include "xenia/xbox.h"
 
 namespace xe {
@@ -32,6 +33,21 @@ enum class X_USER_PROFILE_SETTING_SOURCE : uint32_t {
   DEFAULT = 1,
   TITLE = 2,
   UNKNOWN = 3,
+};
+
+enum PREFERRED_COLOR_OPTIONS : uint32_t {
+  PREFERRED_COLOR_NONE,
+  PREFERRED_COLOR_BLACK,
+  PREFERRED_COLOR_WHITE,
+  PREFERRED_COLOR_YELLOW,
+  PREFERRED_COLOR_ORANGE,
+  PREFERRED_COLOR_PINK,
+  PREFERRED_COLOR_RED,
+  PREFERRED_COLOR_PURPLE,
+  PREFERRED_COLOR_BLUE,
+  PREFERRED_COLOR_GREEN,
+  PREFERRED_COLOR_BROWN,
+  PREFERRED_COLOR_SILVER
 };
 
 // Each setting contains 0x18 bytes long header
@@ -107,7 +123,7 @@ class UserSetting {
  private:
   void CreateUserData(uint32_t setting_id, uint32_t data) {
     header_.setting_type = static_cast<uint8_t>(X_USER_DATA_TYPE::INT32);
-    header_.s64 = data;
+    header_.u32 = data;
     user_data_ = std::make_unique<Uint32UserData>(data);
   }
   void CreateUserData(uint32_t setting_id, int32_t data) {
@@ -160,6 +176,15 @@ class UserProfile {
   uint32_t signin_state() const { return 1; }
   uint32_t type() const { return 1 | 2; /* local | online profile? */ }
 
+  uint32_t GetCachedFlags() const { return account_info_.GetCachedFlags(); };
+  uint32_t GetSubscriptionTier() const {
+    return account_info_.GetSubscriptionTier();
+  }
+  void GetPasscode(uint16_t* passcode) const {
+    std::memcpy(passcode, account_info_.passcode,
+                sizeof(account_info_.passcode));
+  };
+
   void AddSetting(std::unique_ptr<UserSetting> setting);
   UserSetting* GetSetting(uint32_t setting_id);
 
@@ -168,12 +193,21 @@ class UserProfile {
 
   std::map<uint32_t, uint32_t> contexts_;
 
+  friend class GpdAchievementBackend;
+
+ protected:
+  AchievementGpdStructure* GetAchievement(const uint32_t title_id,
+                                          const uint32_t id);
+  std::vector<AchievementGpdStructure>* GetTitleAchievements(
+      const uint32_t title_id);
+
  private:
   uint64_t xuid_;
   X_XAMACCOUNTINFO account_info_;
 
   std::vector<std::unique_ptr<UserSetting>> setting_list_;
   std::unordered_map<uint32_t, UserSetting*> settings_;
+  std::map<uint32_t, std::vector<AchievementGpdStructure>> achievements_;
 
   std::vector<Property> properties_;
 

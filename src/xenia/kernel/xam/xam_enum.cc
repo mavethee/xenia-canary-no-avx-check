@@ -123,6 +123,62 @@ dword_result_t XamGetPrivateEnumStructureFromHandle_entry(
 }
 DECLARE_XAM_EXPORT1(XamGetPrivateEnumStructureFromHandle, kNone, kStub);
 
+dword_result_t XamProfileCreateEnumerator_entry(dword_t device_id,
+                                                lpdword_t handle_ptr) {
+  if (!handle_ptr) {
+    return X_ERROR_INVALID_PARAMETER;
+  }
+
+  auto e = new XStaticEnumerator<X_PROFILEENUMRESULT>(kernel_state(), 1);
+
+  auto result = e->Initialize(XUserIndexAny, 0xFE, 0x23001, 0x23003, 0);
+
+  if (XFAILED(result)) {
+    return result;
+  }
+
+  const auto& accounts =
+      kernel_state()->xam_state()->profile_manager()->GetAccounts();
+
+  for (const auto& [xuid, account] : *accounts) {
+    X_PROFILEENUMRESULT* profile = e->AppendItem();
+
+    profile->xuid_offline = xuid;
+    profile->device_id = 1;
+    memcpy(&profile->account, &account, sizeof(X_XAMACCOUNTINFO));
+
+    xe::string_util::copy_and_swap_truncating(
+        profile->account.gamertag, account.gamertag, sizeof(account.gamertag));
+  }
+
+  *handle_ptr = e->handle();
+  return X_ERROR_SUCCESS;
+}
+DECLARE_XAM_EXPORT1(XamProfileCreateEnumerator, kNone, kImplemented);
+
+dword_result_t XamProfileEnumerate_entry(dword_t handle, dword_t flags,
+                                         lpvoid_t buffer,
+                                         pointer_t<XAM_OVERLAPPED> overlapped) {
+  uint32_t dummy = 0;
+  auto result = xeXamEnumerate(handle, flags, buffer, 0,
+                               !overlapped ? &dummy : nullptr, overlapped);
+
+  return result;
+}
+DECLARE_XAM_EXPORT1(XamProfileEnumerate, kNone, kImplemented);
+
+dword_result_t EnumerateMediaObjects_entry() { return X_E_NOT_IMPLEMENTED; }
+DECLARE_XAM_EXPORT1(EnumerateMediaObjects, kNone, kStub);
+
+dword_result_t EnumerateMediaObjects__entry() { return X_E_NOT_IMPLEMENTED; }
+DECLARE_XAM_EXPORT1(EnumerateMediaObjects_, kNone, kStub);
+
+dword_result_t EnumerateMediaObjects_0_entry() { return X_E_NOT_IMPLEMENTED; }
+DECLARE_XAM_EXPORT1(EnumerateMediaObjects_0, kNone, kStub);
+
+dword_result_t EnumerateMediaObjects_1_entry() { return X_E_NOT_IMPLEMENTED; }
+DECLARE_XAM_EXPORT1(EnumerateMediaObjects_1, kNone, kStub);
+
 }  // namespace xam
 }  // namespace kernel
 }  // namespace xe

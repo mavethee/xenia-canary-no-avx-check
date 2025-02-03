@@ -867,11 +867,11 @@ void KernelState::RegisterNotifyListener(XNotifyListener* listener) {
   if (!has_notified_startup_ && listener->mask() & kXNotifySystem) {
     has_notified_startup_ = true;
     // XN_SYS_UI (on, off)
-    listener->EnqueueNotification(kXNotificationIDSystemUI, 1);
-    listener->EnqueueNotification(kXNotificationIDSystemUI, 0);
+    listener->EnqueueNotification(kXNotificationSystemUI, 1);
+    listener->EnqueueNotification(kXNotificationSystemUI, 0);
     // XN_SYS_SIGNINCHANGED x2
-    listener->EnqueueNotification(kXNotificationIDSystemSignInChanged, 1);
-    listener->EnqueueNotification(kXNotificationIDSystemSignInChanged, 1);
+    listener->EnqueueNotification(kXNotificationSystemSignInChanged, 1);
+    listener->EnqueueNotification(kXNotificationSystemSignInChanged, 1);
   }
 }
 
@@ -1069,7 +1069,8 @@ bool KernelState::Save(ByteStream* stream) {
 
     stream->Write<uint32_t>(static_cast<uint32_t>(object->type()));
     if (!object->Save(stream)) {
-      XELOGD("Did not save object of type {}", object->type());
+      XELOGD("Did not save object of type {}",
+             static_cast<uint32_t>(object->type()));
       assert_always();
 
       // Revert backwards and overwrite if a save failed.

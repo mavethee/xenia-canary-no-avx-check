@@ -103,7 +103,14 @@ std::filesystem::path ContentManager::ResolvePackagePath(
   // Content path:
   // content_root/title_id/content_type/data_file_name/
   auto get_package_path = [&, data, disc_number](const uint32_t title_id) {
-    uint64_t used_xuid = (data.xuid != -1 && data.xuid != 0) ? data.xuid : xuid;
+    uint64_t used_xuid =
+        (data.xuid != -1 && data.xuid != 0) ? data.xuid.get() : xuid;
+
+    // All DLCs are stored in common directory, so we need to override xuid for
+    // them and probably some other types.
+    if (data.content_type == XContentType::kMarketplaceContent) {
+      used_xuid = 0;
+    }
 
     auto package_root =
         ResolvePackageRoot(used_xuid, title_id, data.content_type);
@@ -175,7 +182,7 @@ std::unordered_set<uint32_t> ContentManager::FindPublisherTitleIds(
   for (const auto& entry : publisher_entries) {
     std::filesystem::path path_to_publisher_dir =
         entry.path / entry.name /
-        fmt::format("{:08X}", XContentType::kPublisher);
+        fmt::format("{:08X}", static_cast<uint32_t>(XContentType::kPublisher));
 
     if (!std::filesystem::exists(path_to_publisher_dir)) {
       continue;
@@ -263,7 +270,8 @@ X_RESULT ContentManager::WriteContentHeaderFile(const uint64_t xuid,
   if (data.xuid == -1) {
     data.xuid = xuid;
   }
-  uint64_t used_xuid = (data.xuid != -1 && data.xuid != 0) ? data.xuid : xuid;
+  uint64_t used_xuid =
+      (data.xuid != -1 && data.xuid != 0) ? data.xuid.get() : xuid;
 
   auto header_path = ResolvePackageHeaderPath(data.file_name(), used_xuid,
                                               data.title_id, data.content_type);

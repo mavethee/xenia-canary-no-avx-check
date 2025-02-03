@@ -151,11 +151,15 @@ void PPCTranslator::DumpHIR(GuestFunction* function, PPCHIRBuilder* builder) {
 
     {
       wchar_t tmpbuf[64];
+#ifdef XE_PLATFORM_WIN32
       _snwprintf(tmpbuf, 64, L"%X", function->address());
+#else
+      swprintf(tmpbuf, 64, L"%X", function->address());
+#endif
       folder_path.append(&tmpbuf[0]);
     }
 
-    FILE* f = fopen(folder_path.generic_u8string().c_str(), "w");
+    FILE* f = fopen(folder_path.string().c_str(), "w");
     if (f) {
       fputs(buffer.buffer(), f);
       fclose(f);

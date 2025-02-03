@@ -43,6 +43,8 @@
 #include "xenia/gpu/xenos.h"
 #include "xenia/ui/d3d12/d3d12_util.h"
 
+#include "third_party/fmt/include/fmt/xchar.h"
+
 DEFINE_bool(d3d12_dxbc_disasm, false,
             "Disassemble DXBC shaders after generation.", "D3D12");
 DEFINE_bool(
@@ -242,7 +244,7 @@ void PipelineCache::InitializeShaderStorage(
       XELOGE(
           "Failed to create the shareable shader storage directory, persistent "
           "shader storage will be disabled: {}",
-          xe::path_to_utf8(shader_storage_shareable_root));
+          shader_storage_shareable_root);
       return;
     }
   }
@@ -265,7 +267,7 @@ void PipelineCache::InitializeShaderStorage(
     XELOGE(
         "Failed to open the Direct3D 12 pipeline description storage file for "
         "writing, persistent shader storage will be disabled: {}",
-        xe::path_to_utf8(pipeline_storage_file_path));
+        pipeline_storage_file_path);
     return;
   }
   pipeline_storage_file_flush_needed_ = false;
@@ -353,7 +355,7 @@ void PipelineCache::InitializeShaderStorage(
     XELOGE(
         "Failed to open the guest shader storage file for writing, persistent "
         "shader storage will be disabled: {}",
-        xe::path_to_utf8(shader_storage_file_path));
+        shader_storage_file_path);
     fclose(pipeline_storage_file_);
     pipeline_storage_file_ = nullptr;
     return;
