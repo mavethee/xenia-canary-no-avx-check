@@ -28,13 +28,6 @@ jobs:
               asset=xenia_canary_windows.zip
               7z a $asset './xenia_canary_windows/*'
               ;;
-            linux)
-              asset=xenia_canary_linux.tar.gz
-              cd xenia_canary_linux
-              chmod +x xenia_canary
-              tar -cvpf ../$asset *
-              cd -
-              ;;
           esac
           if [ ! -f $asset ]; then
             echo "::error::$asset doesn't exist!"
