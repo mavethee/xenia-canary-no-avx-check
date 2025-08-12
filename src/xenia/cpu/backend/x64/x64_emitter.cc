@@ -39,6 +39,10 @@
 #include "xenia/cpu/symbol.h"
 #include "xenia/cpu/thread_state.h"
 
+// Rosetta 2 stuff
+#include <intrin.h>
+#include <string.h>
+
 DEFINE_bool(debugprint_trap_log, false,
             "Log debugprint traps to the active debugger", "CPU");
 DEFINE_bool(ignore_undefined_externs, true,
@@ -86,13 +90,33 @@ constexpr uint32_t X64Emitter::xmm_reg_map_[X64Emitter::XMM_COUNT] = {
     4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
 };
 
+bool is_rosetta2() {
+  int cpuInfo[4];
+  char brand[49] = {0};
+
+  __cpuid(cpuInfo, 0x80000002);
+  memcpy(brand, cpuInfo, sizeof(cpuInfo));
+  __cpuid(cpuInfo, 0x80000003);
+  memcpy(brand + 16, cpuInfo, sizeof(cpuInfo));
+  __cpuid(cpuInfo, 0x80000004);
+  memcpy(brand + 32, cpuInfo, sizeof(cpuInfo));
+  brand[48] = '\0';
+
+  for (char* p = brand; *p; ++p) {
+    if (_strnicmp(p, "VirtualApple", 12) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
 X64Emitter::X64Emitter(X64Backend* backend, XbyakAllocator* allocator)
     : CodeGenerator(kMaxCodeSize, Xbyak::AutoGrow, allocator),
       processor_(backend->processor()),
       backend_(backend),
       code_cache_(backend->code_cache()),
       allocator_(allocator) {
-  if (!cpu_.has(Xbyak::util::Cpu::tAVX)) {
+  if (!cpu_.has(Xbyak::util::Cpu::tAVX) && !is_rosetta2()) {
     xe::FatalError(
         "Your CPU does not support AVX, which is required by Xenia. See the "
         "FAQ for system requirements at https://xenia.jp");

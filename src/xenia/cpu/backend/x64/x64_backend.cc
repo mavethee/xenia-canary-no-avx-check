@@ -26,6 +26,10 @@
 #include "xenia/cpu/stack_walker.h"
 #include "xenia/cpu/xex_module.h"
 
+// Rosetta 2 stuff
+#include <intrin.h>
+#include <string.h>
+
 DEFINE_bool(record_mmio_access_exceptions, true,
             "For guest addresses records whether we caught any mmio accesses "
             "for them. This info can then be used on a subsequent run to "
@@ -217,13 +221,33 @@ static void GuestProfilerUpdateThreadProc() {
 static std::unique_ptr<xe::threading::Thread> g_profiler_update_thread{};
 #endif
 
+bool is_rosetta2() {
+  int cpuInfo[4];
+  char brand[49] = {0};
+
+  __cpuid(cpuInfo, 0x80000002);
+  memcpy(brand, cpuInfo, sizeof(cpuInfo));
+  __cpuid(cpuInfo, 0x80000003);
+  memcpy(brand + 16, cpuInfo, sizeof(cpuInfo));
+  __cpuid(cpuInfo, 0x80000004);
+  memcpy(brand + 32, cpuInfo, sizeof(cpuInfo));
+  brand[48] = '\0';
+
+  for (char* p = brand; *p; ++p) {
+    if (_strnicmp(p, "VirtualApple", 12) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool X64Backend::Initialize(Processor* processor) {
   if (!Backend::Initialize(processor)) {
     return false;
   }
 
   Xbyak::util::Cpu cpu;
-  if (!cpu.has(Xbyak::util::Cpu::tAVX)) {
+  if (!cpu_.has(Xbyak::util::Cpu::tAVX) && !is_rosetta2()) {
     XELOGE("This CPU does not support AVX. The emulator will now crash.");
     return false;
   }
