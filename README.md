@@ -1,3 +1,24 @@
+# Deprecation Notice:
+
+>[!NOTE]
+>This repository is no longer maintained and has been archived.
+>
+>With macOS 26, Xenia Master, Xenia Canary and Xenia Canary Netplay are now bootable on Apple Silicon Macs.
+>
+>All of them support macOS 26 and there's no need to use this fork anymore.
+
+![Notice](https://zapodaj.net/images/b7892a6d5c4f1.png)
+
+You can download the latest builds here:
+
+- [Xenia Master](https://github.com/xenia-project/release-builds-windows/releases/latest),
+
+- [Xenia Canary](https://github.com/xenia-canary/xenia-canary-releases/releases/latest),
+
+- [Xenia Canary Netplay](https://github.com/AdrianCassar/xenia-canary/releases/latest).
+
+# README before archiving repository:
+
 <p align="center">
     <a href="https://github.com/xenia-canary/xenia-canary/tree/canary_experimental/assets/icon">
         <img height="256px" src="https://raw.githubusercontent.com/xenia-canary/xenia/master/assets/icon/256.png" />
